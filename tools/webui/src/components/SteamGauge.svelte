@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Cpu, Gauge, MemoryStick } from '@lucide/svelte';
 
-	type GaugeKind = 'cpu' | 'gpu' | 'vram';
+	type GaugeKind = 'cpu' | 'gpu' | 'vram' | 'memory';
 	type GaugeTone = 'green' | 'orange' | 'purple';
 
 	let {
@@ -38,7 +38,7 @@
 		<span class="gauge-label">
 			{#if kind === 'cpu'}
 				<Cpu size={14} />
-			{:else if kind === 'vram'}
+			{:else if kind === 'vram' || kind === 'memory'}
 				<MemoryStick size={14} />
 			{:else}
 				<Gauge size={14} />

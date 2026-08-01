@@ -8,7 +8,32 @@ interface Saved {
 	format: string;
 	dark: boolean;
 	logsOpen: boolean;
+	referenceLanguage: 'auto' | 'mk';
 	request: AceRequest;
+}
+
+function targetLanguage(value: unknown): string {
+	const language = String(value ?? '')
+		.trim()
+		.toLowerCase();
+	if (language === 'english' || language === 'english (en)' || language === 'eng') return 'en';
+	if (
+		language === 'macedonian' ||
+		language === 'macedonian (mk)' ||
+		language === 'mkd' ||
+		language === 'mac'
+	) {
+		return 'mk';
+	}
+	return language === 'en' || language === 'mk' || language === 'unknown' ? language : '';
+}
+
+function targetRequest(request: AceRequest): AceRequest {
+	const next = { ...request };
+	const language = targetLanguage(next.vocal_language);
+	if (language) next.vocal_language = language;
+	else delete next.vocal_language;
+	return next;
 }
 
 function load(): Saved {
@@ -22,7 +47,8 @@ function load(): Saved {
 				format: ['mp3', 'wav16', 'wav24', 'wav32'].includes(parsed.format) ? parsed.format : 'mp3',
 				dark: parsed.dark ?? true,
 				logsOpen: parsed.logsOpen ?? true,
-				request: parsed.request || { caption: '', use_cot_caption: true }
+				referenceLanguage: parsed.referenceLanguage === 'auto' ? 'auto' : 'mk',
+				request: targetRequest(parsed.request || { caption: '', use_cot_caption: true })
 			};
 		}
 	} catch {
@@ -34,6 +60,7 @@ function load(): Saved {
 		format: 'mp3',
 		dark: true,
 		logsOpen: true,
+		referenceLanguage: 'mk',
 		request: { caption: '', use_cot_caption: true }
 	};
 }
@@ -46,6 +73,7 @@ export const app = $state({
 	format: saved.format,
 	dark: saved.dark,
 	logsOpen: saved.logsOpen,
+	referenceLanguage: saved.referenceLanguage,
 	request: saved.request as AceRequest,
 	songs: [] as Song[],
 	props: null as AceProps | null,
@@ -74,6 +102,7 @@ export function toast(msg: string, ms = 4000, ok = false) {
 // overwrite app.request, preserving model routing fields unless the
 // incoming request provides them (non-empty string / non-null number).
 export function setRequest(incoming: AceRequest) {
+	incoming = targetRequest(incoming);
 	if (!incoming.synth_model) incoming.synth_model = app.request.synth_model;
 	if (!incoming.lm_model) incoming.lm_model = app.request.lm_model;
 	if (!incoming.adapter) incoming.adapter = app.request.adapter;
@@ -103,6 +132,7 @@ $effect.root(() => {
 			format: app.format,
 			dark: app.dark,
 			logsOpen: app.logsOpen,
+			referenceLanguage: app.referenceLanguage,
 			request: app.request
 		};
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(data));

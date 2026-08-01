@@ -198,16 +198,10 @@ struct MetadataFSM {
             }
             build_value_tree(bpe, keyscale_tree, "keyscale:", vals);
         }
-        // Language: ISO 639-1 codes supported by the ACE-Step metadata format.
-        // Keep Macedonian (mk) explicit: without it the constrained decoder
-        // can only fall back to nearby South Slavic choices such as sr/bg.
+        // This application intentionally targets English and Macedonian only.
+        // Keeping the value tree narrow prevents nearby regional labels.
         {
-            std::vector<std::string> vals = {
-                "ar", "az", "bg", "bn", "ca", "cs", "da", "de", "el", "en",  "es", "fa",      "fi",
-                "fr", "he", "hi", "hr", "ht", "hu", "id", "is", "it", "ja",  "ko", "la",      "lt",
-                "mk", "ms", "ne", "nl", "no", "pa", "pl", "pt", "ro", "ru", "sa",  "sk", "sr",      "sv",
-                "sw", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi", "yue", "zh", "unknown",
-            };
+            std::vector<std::string> vals = { "en", "mk", "unknown" };
             build_value_tree(bpe, language_tree, "language:", vals);
         }
         // Time signature

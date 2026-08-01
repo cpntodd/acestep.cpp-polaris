@@ -1,5 +1,13 @@
 <script lang="ts">
-	import { Archive, AudioLines, LockKeyhole, ScanLine, Upload, WandSparkles } from '@lucide/svelte';
+	import {
+		Archive,
+		AudioLines,
+		Languages,
+		LockKeyhole,
+		ScanLine,
+		Upload,
+		WandSparkles
+	} from '@lucide/svelte';
 	import { app, setRequest, toast } from '../lib/state.svelte.js';
 	import { putSong } from '../lib/db.js';
 	import { cancelJob } from '../lib/api.js';
@@ -16,12 +24,46 @@
 	let activeBatchJobId = $state<string | null>(null);
 	let referenceCount = $derived(app.songs.filter((song) => song.source === 'upload').length);
 
+	async function chooseReferenceLanguage(mode: 'auto' | 'mk') {
+		app.referenceLanguage = mode;
+		const saved: Promise<unknown>[] = [];
+		for (const song of app.songs) {
+			if (song.source !== 'upload') continue;
+			song.referenceLanguage = mode;
+			const request = { ...song.request };
+			if (mode === 'mk') {
+				request.vocal_language = 'mk';
+			} else if (request.vocal_language === 'mk') {
+				delete request.vocal_language;
+			}
+			song.request = request;
+			if (song.id != null) saved.push(putSong($state.snapshot(song)));
+		}
+		await Promise.all(saved);
+		toast(
+			mode === 'mk'
+				? 'Macedonian collection mode is on. Refresh the saved styles to correct old profiles.'
+				: 'Automatic language listening is on for new readings.',
+			5000,
+			true
+		);
+	}
+
 	async function importFile(file: File | undefined) {
 		if (!file) return;
 		if (isReferenceTemplate(file)) {
 			importing = true;
 			try {
 				const song = await importReferenceTemplate(file);
+				song.referenceLanguage = app.referenceLanguage;
+				if (app.referenceLanguage === 'mk') {
+					song.request = { ...song.request, vocal_language: 'mk' };
+				} else if (song.request.vocal_language === 'mk') {
+					const request = { ...song.request };
+					delete request.vocal_language;
+					song.request = request;
+				}
+				if (song.id != null) await putSong($state.snapshot(song));
 				app.songs.unshift(song);
 				app.name = song.name;
 				app.pendingRequests = [];
@@ -44,6 +86,12 @@
 		importing = true;
 		try {
 			const song = await storeReferenceTrack(file);
+			song.referenceLanguage = app.referenceLanguage;
+			song.request = {
+				...song.request,
+				...(app.referenceLanguage === 'mk' ? { vocal_language: 'mk' } : {})
+			};
+			if (app.referenceLanguage === 'auto') delete song.request.vocal_language;
 			app.songs.unshift(song);
 			app.name = song.name;
 			app.srcSongIds = song.id != null ? [song.id] : [];
@@ -85,6 +133,15 @@
 				}
 			}
 			for (const song of added) app.songs.unshift(song);
+			for (const song of added) {
+				song.referenceLanguage = app.referenceLanguage;
+				song.request = {
+					...song.request,
+					...(app.referenceLanguage === 'mk' ? { vocal_language: 'mk' } : {})
+				};
+				if (app.referenceLanguage === 'auto') delete song.request.vocal_language;
+				if (song.id != null) await putSong($state.snapshot(song));
+			}
 			if (added.length > 0) {
 				app.name = added[0].name;
 				app.srcSongIds = added.map((song) => song.id).filter((id): id is number => id != null);
@@ -139,7 +196,8 @@
 						app.request.synth_model as string,
 						{
 							onJobId: (id) => (activeBatchJobId = id),
-							isCancelled: () => batchStopRequested
+							isCancelled: () => batchStopRequested,
+							languageHint: song.referenceLanguage === 'mk' ? 'mk' : undefined
 						}
 					);
 					if (song.id != null) await putSong($state.snapshot(song));
@@ -212,6 +270,31 @@
 		</button>
 	</div>
 	{#if referenceCount > 0}
+		<div
+			class="language-anchor"
+			title="A source hint helps the local listener when the preview audio is too compressed to identify the singing language on its own"
+		>
+			<div class="language-anchor-copy">
+				<Languages size={15} />
+				<div>
+					<strong>What kind of songs are these?</strong><span
+						>Use this when your references come from Pesna.org.</span
+					>
+				</div>
+			</div>
+			<div class="language-options">
+				<button
+					class:active={app.referenceLanguage === 'mk'}
+					type="button"
+					onclick={() => void chooseReferenceLanguage('mk')}>Macedonian collection</button
+				>
+				<button
+					class:active={app.referenceLanguage === 'auto'}
+					type="button"
+					onclick={() => void chooseReferenceLanguage('auto')}>Let the listener decide</button
+				>
+			</div>
+		</div>
 		<button
 			class="batch-analyze"
 			type="button"
@@ -245,6 +328,57 @@
 			border-color 180ms ease,
 			background 180ms ease,
 			transform 180ms ease;
+	}
+
+	.language-anchor {
+		grid-column: 1 / -1;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.8rem 0.9rem;
+		border: 1px solid rgba(255, 200, 87, 0.28);
+		background: rgba(255, 200, 87, 0.06);
+	}
+
+	.language-anchor-copy {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		color: var(--accent-warm);
+	}
+
+	.language-anchor-copy div {
+		display: grid;
+		gap: 0.18rem;
+	}
+
+	.language-anchor-copy span {
+		color: var(--text-dim);
+		font-size: 0.72rem;
+	}
+
+	.language-options {
+		display: flex;
+		gap: 0.35rem;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+	}
+
+	.language-options button {
+		border: 1px solid var(--line-strong);
+		background: transparent;
+		color: var(--text-dim);
+		padding: 0.45rem 0.6rem;
+		font: inherit;
+		font-size: 0.72rem;
+		cursor: pointer;
+	}
+
+	.language-options button.active {
+		border-color: var(--accent-warm);
+		background: rgba(255, 200, 87, 0.15);
+		color: var(--text);
 	}
 	.reference-uploader::before {
 		content: '';

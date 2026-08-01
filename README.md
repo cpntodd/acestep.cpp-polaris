@@ -24,6 +24,13 @@ Multiple DiT variants: turbo (8 steps), sft (50 steps, higher quality), base, sh
 
 Alternative: `./models.sh` downloads the default set automatically (needs `pip install hf`).
 
+For local reference-language detection, also place
+`ggml-large-v3-turbo-q5_0.bin` from the official whisper.cpp model collection in
+`models/`. The bundled listener uses it locally on voice-active windows and
+returns only English (`en`), Macedonian (`mk`), or `unknown`; it does not send
+audio to a remote service. The Debian bundle includes this model when it is
+present in the checkout.
+
 ## Build
 
 ```
@@ -104,6 +111,13 @@ encode. **Use style** copies the profile into Compose; **Source** and
 
 Audio is not uploaded to a third-party service by the WebUI. It is sent only
 to the local `ace-server` when analysis or generation is explicitly started.
+
+When a reference includes vocals, the server first selects voice-active
+windows and runs the bundled multilingual Whisper listener over them. The
+music listener still supplies tempo, key, arrangement, and style details, but
+language is decided independently so shared Balkan instrumentation cannot turn
+Macedonian into Serbian, Bulgarian, Turkish, or Indian. Ambiguous or
+instrumental material stays `unknown`.
 
 Reference cards can export an `.acestep-template.zip` containing the local
 audio, prompt/style profile, request settings, and cached VAE latents. Import a

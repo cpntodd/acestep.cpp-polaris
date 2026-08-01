@@ -47,6 +47,7 @@ export async function analyzeReferenceSong(
 	options?: {
 		onJobId?: (id: string) => void;
 		isCancelled?: () => boolean;
+		languageHint?: string;
 	}
 ): Promise<{ requests: Song['request'][] }> {
 	if (song.source !== 'upload') throw new Error('Only reference tracks can be analyzed');
@@ -54,10 +55,11 @@ export async function analyzeReferenceSong(
 	song.analysisError = '';
 	try {
 		const jobId = await understandSubmit(
-			song.latents ? null : song.audio,
+			song.audio,
 			song.latents ?? null,
 			lmModel,
-			synthModel
+			synthModel,
+			options?.languageHint
 		);
 		options?.onJobId?.(jobId);
 		if (options?.isCancelled?.()) throw new Error('Analysis stopped');
@@ -67,6 +69,7 @@ export async function analyzeReferenceSong(
 		const detected = requests[0];
 		const newRequest = {
 			...detected,
+			vocal_language: options?.languageHint || detected.vocal_language,
 			task_type: song.request.task_type || 'text2music',
 			synth_model: song.request.synth_model || synthModel,
 			lm_model: song.request.lm_model || lmModel,

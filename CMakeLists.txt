@@ -67,6 +67,32 @@ add_subdirectory(ggml)
 # cpp-httplib (HTTP server library, used by ace-server)
 add_subdirectory(vendor/cpp-httplib)
 
+# Dedicated local speech-language listener. This is a small vendored slice of
+# whisper.cpp, linked against the repository's ggml and kept on CPU so language
+# identification does not compete with ACE-Step's music models for VRAM.
+add_library(acestep-whisper STATIC
+    vendor/whisper/include/whisper.h
+    vendor/whisper/src/whisper-arch.h
+    vendor/whisper/src/whisper.cpp
+)
+target_include_directories(acestep-whisper PUBLIC
+    ${CMAKE_SOURCE_DIR}/vendor/whisper/include
+    ${CMAKE_SOURCE_DIR}/vendor/whisper/src
+)
+target_include_directories(acestep-whisper SYSTEM PRIVATE
+    ${CMAKE_SOURCE_DIR}/ggml/include
+)
+target_compile_features(acestep-whisper PUBLIC cxx_std_17)
+target_compile_definitions(acestep-whisper PRIVATE WHISPER_VERSION=\"acestep-vendored\")
+target_link_libraries(acestep-whisper PUBLIC ggml Threads::Threads)
+
+add_library(acestep-language-id STATIC src/language-id.cpp)
+target_include_directories(acestep-language-id PUBLIC
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/vendor/whisper/include
+)
+target_link_libraries(acestep-language-id PUBLIC acestep-whisper)
+
 # Shared compile options and ggml linkage
 macro(link_ggml_backends target)
     target_include_directories(${target} PRIVATE
@@ -153,7 +179,7 @@ set_source_files_properties(${WEBUI_OUTPUT} PROPERTIES GENERATED TRUE)
 # ace-server: HTTP server (LM + synth endpoints + embedded webui)
 add_executable(ace-server tools/ace-server.cpp tools/system-metrics.cpp ${WEBUI_OUTPUT})
 target_include_directories(ace-server PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-target_link_libraries(ace-server PRIVATE acestep-core httplib)
+target_link_libraries(ace-server PRIVATE acestep-core acestep-language-id httplib)
 link_ggml_backends(ace-server)
 
 # Local process supervisor used by the packaged desktop launcher. It keeps a

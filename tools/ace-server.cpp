@@ -29,6 +29,7 @@
 //   /understand LM + DiT + VAE
 
 #include "audio-io.h"
+#include "language-id.h"
 #include "model-registry.h"
 #include "model-store.h"
 #include "pipeline-lm.h"
@@ -182,6 +183,14 @@ static ModelStore * g_store = nullptr;
 // model registry (populated at startup from GGUF metadata)
 static ModelRegistry g_registry;
 
+// Dedicated CPU language recognizer. It is lazy-loaded on the first raw-audio
+// understand request so server startup stays fast, then reused for the local
+// reference library. Cached-latent requests still carry their original audio
+// when the WebUI wants language identification.
+static std::string            g_language_model_path;
+static AceLanguageIdentifier *g_language_identifier = nullptr;
+static bool                   g_language_id_attempted = false;
+
 // loaded model names (empty = nothing loaded)
 static std::string g_loaded_lm;
 static std::string g_loaded_dit;
@@ -198,6 +207,28 @@ static AceUnderstandParams g_und_params;
 // limits
 static int  g_max_batch   = 1;
 static bool g_keep_loaded = false;
+
+static bool file_exists(const std::string & path) {
+    FILE * f = fopen(path.c_str(), "rb");
+    if (!f) return false;
+    fclose(f);
+    return true;
+}
+
+static std::string find_language_model(const char * models_dir) {
+    if (!models_dir) return "";
+    static const char * candidates[] = {
+        "ggml-large-v3-turbo-q5_0.bin",
+        "ggml-large-v3-turbo.bin",
+        "ggml-medium.bin",
+        "ggml-small.bin",
+    };
+    for (const char * candidate : candidates) {
+        std::string path = std::string(models_dir) + "/" + candidate;
+        if (file_exists(path)) return path;
+    }
+    return "";
+}
 
 // job system: all compute endpoints create a job and return its ID
 // immediately. the worker thread processes jobs in FIFO order, stores
@@ -1051,6 +1082,29 @@ static void understand_worker(std::shared_ptr<Job> job,
         return;
     }
 
+    // Run the dedicated local speech-language recognizer on raw audio before
+    // ACE-Step's music listener. Its result is accepted only when the target
+    // language wins with enough probability and margin; otherwise the normal
+    // metadata path remains unknown rather than inventing a regional label.
+    if (src_interleaved && !g_language_model_path.empty()) {
+        if (!g_language_id_attempted) {
+            g_language_id_attempted = true;
+            g_language_identifier = ace_language_id_create(g_language_model_path.c_str());
+        }
+        if (g_language_identifier) {
+            AceLanguageResult language_result;
+            if (ace_language_id_analyze(g_language_identifier, src_interleaved, src_len, &language_result)) {
+                fprintf(stderr,
+                        "[Language-ID] windows=%d language=%s confidence=%.3f en=%.3f mk=%.3f\n",
+                        language_result.voice_windows, language_result.language.c_str(), language_result.confidence,
+                        language_result.english_probability, language_result.macedonian_probability);
+                if (ace_req.vocal_language.empty() && language_result.language != "unknown") {
+                    ace_req.vocal_language = language_result.language;
+                }
+            }
+        }
+    }
+
     // Resolve LM + DiT (the DiT path carries the tokenizer weights) + VAE.
     std::string        lm_name   = resolve_name(g_registry.lm, ace_req.lm_model, g_loaded_lm);
     std::string        dit_name  = resolve_name(g_registry.dit, ace_req.synth_model, g_loaded_dit);
@@ -1595,6 +1649,13 @@ static void handle_metrics(const httplib::Request &, httplib::Response & res) {
     yyjson_mut_obj_add_uint(doc, vram, "total", metrics.vram_total);
     yyjson_mut_obj_add_val(doc, root, "vram", vram);
 
+    yyjson_mut_val * memory = yyjson_mut_obj(doc);
+    yyjson_mut_obj_add_bool(doc, memory, "available", metrics.memory_available);
+    yyjson_mut_obj_add_real(doc, memory, "usage", metrics.memory_usage);
+    yyjson_mut_obj_add_uint(doc, memory, "used", metrics.memory_used);
+    yyjson_mut_obj_add_uint(doc, memory, "total", metrics.memory_total);
+    yyjson_mut_obj_add_val(doc, root, "memory", memory);
+
     char * json = yyjson_mut_write(doc, YYJSON_WRITE_FP_TO_FIXED(2), NULL);
     yyjson_mut_doc_free(doc);
     res.set_content(json, "application/json");
@@ -1616,6 +1677,7 @@ static void usage(const char * prog) {
             "\n"
             "Adapter:\n"
             "  --adapters <dir>        Directory of adapters\n"
+            "  --language-model <file> Local multilingual speech model for language ID\n"
             "\n"
             "Memory control:\n"
             "  --keep-loaded           Keep models in VRAM between requests\n"
@@ -1644,6 +1706,7 @@ int main(int argc, char ** argv) {
     int          port         = 8080;
     const char * models_dir   = nullptr;
     const char * adapters_dir = nullptr;
+    const char * language_model = nullptr;
 
     if (argc < 2) {
         usage(argv[0]);
@@ -1655,6 +1718,8 @@ int main(int argc, char ** argv) {
             models_dir = argv[++i];
         } else if (!strcmp(argv[i], "--adapters") && i + 1 < argc) {
             adapters_dir = argv[++i];
+        } else if (!strcmp(argv[i], "--language-model") && i + 1 < argc) {
+            language_model = argv[++i];
         } else if (!strcmp(argv[i], "--max-seq") && i + 1 < argc) {
             g_lm_params.max_seq = atoi(argv[++i]);
 
@@ -1703,6 +1768,14 @@ int main(int argc, char ** argv) {
         usage(argv[0]);
         return 1;
     }
+
+    g_language_model_path = language_model ? language_model : find_language_model(models_dir);
+    if (!g_language_model_path.empty() && !file_exists(g_language_model_path)) {
+        fprintf(stderr, "[Server] WARNING: speech language model not found: %s\n", g_language_model_path.c_str());
+        g_language_model_path.clear();
+    }
+    fprintf(stderr, "[Server] Speech language ID: %s\n",
+            g_language_model_path.empty() ? "unavailable (unknown fallback)" : g_language_model_path.c_str());
 
     // stderr capture for SSE /logs (must be after arg parsing so --help prints directly)
     LogCapture log_capture;
@@ -1927,6 +2000,8 @@ int main(int argc, char ** argv) {
     // cleanup
     fprintf(stderr, "[Server] Shutting down...\n");
     store_free(g_store);
+    ace_language_id_free(g_language_identifier);
+    g_language_identifier = nullptr;
     fprintf(stderr, "[Server] Done\n");
 
     return 0;

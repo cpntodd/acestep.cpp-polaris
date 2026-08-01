@@ -68,6 +68,26 @@ static inline std::string yy_str(yyjson_val * v) {
     return std::string(yyjson_get_str(v), yyjson_get_len(v));
 }
 
+static std::string target_language_or_unknown(std::string language) {
+    while (!language.empty() && (language.front() == ' ' || language.front() == '\t' || language.front() == '\'' ||
+                                 language.front() == '"')) {
+        language.erase(language.begin());
+    }
+    while (!language.empty() && (language.back() == ' ' || language.back() == '\t' || language.back() == '\'' ||
+                                 language.back() == '"' || language.back() == '\r')) {
+        language.pop_back();
+    }
+    for (char & ch : language) {
+        if (ch >= 'A' && ch <= 'Z') ch = (char) (ch - 'A' + 'a');
+    }
+    if (language == "english" || language == "english (en)" || language == "eng") return "en";
+    if (language == "macedonian" || language == "macedonian (mk)" || language == "mkd" || language == "mac") {
+        return "mk";
+    }
+    if (language == "en" || language == "mk" || language == "unknown") return language;
+    return language.empty() ? "" : "unknown";
+}
+
 // populate AceRequest fields from a yyjson object (must be pre-initialized)
 static void request_parse_obj(yyjson_val * obj, AceRequest * r) {
     yyjson_val * v;
@@ -223,6 +243,7 @@ static void request_parse_obj(yyjson_val * obj, AceRequest * r) {
     if (r->lyrics == "[Instrumental]" && r->vocal_language != "unknown") {
         r->vocal_language = "unknown";
     }
+    r->vocal_language = target_language_or_unknown(r->vocal_language);
 }
 
 // Core parser: takes a raw JSON string. Used by the server directly.

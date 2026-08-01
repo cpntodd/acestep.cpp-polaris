@@ -645,29 +645,17 @@
 	</div>
 	<div class="meta-grid">
 		<label
-			>Language <input
-				list="vocal-language-options"
-				type="text"
-				title="The language of the singing. Macedonian is available as its own choice: mk."
-				placeholder={ph(d?.vocal_language) || 'e.g. Macedonian'}
+			>Language <select
+				class="text-input"
+				title="Choose English, Macedonian, or let the app keep the language unknown."
 				bind:value={app.request.vocal_language}
-			/></label
+			>
+				<option value="">Choose automatically</option>
+				<option value="en">English</option>
+				<option value="mk">Macedonian</option>
+				<option value="unknown">Unknown / instrumental</option>
+			</select></label
 		>
-		<datalist id="vocal-language-options">
-			<option value="mk">Macedonian</option>
-			<option value="sr">Serbian</option>
-			<option value="bg">Bulgarian</option>
-			<option value="en">English</option>
-			<option value="de">German</option>
-			<option value="es">Spanish</option>
-			<option value="fr">French</option>
-			<option value="it">Italian</option>
-			<option value="ja">Japanese</option>
-			<option value="ko">Korean</option>
-			<option value="ru">Russian</option>
-			<option value="uk">Ukrainian</option>
-			<option value="zh">Chinese</option>
-		</datalist>
 		<label title="Approximate singing and beat speed"
 			>Tempo <input type="text" placeholder={ph(d?.bpm)} bind:value={app.request.bpm} /></label
 		>

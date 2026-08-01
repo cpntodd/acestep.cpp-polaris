@@ -355,6 +355,13 @@ int ace_understand_generate(AceUnderstand *      ctx,
     AcePrompt   parsed = {};
     parse_cot_and_lyrics(text, &parsed);
 
+    // A caller may know the provenance of a reference collection even when
+    // the audio-only listener cannot identify the language reliably. This is
+    // intentionally an explicit hint, not an automatic global override: it
+    // lets a Macedonian collection such as Pesna.org remain Macedonian while
+    // leaving unrelated uploads in automatic detection mode.
+    apply_language_hint(req->vocal_language, &parsed);
+
     if (parsed.bpm > 0) {
         fprintf(stderr, "[Understand-Result] bpm: %d\n", parsed.bpm);
     }

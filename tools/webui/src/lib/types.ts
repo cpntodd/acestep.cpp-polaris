@@ -82,6 +82,12 @@ export interface SystemMetrics {
 		used: number;
 		total: number;
 	};
+	memory: {
+		available: boolean;
+		usage: number;
+		used: number;
+		total: number;
+	};
 }
 
 // what we store in IndexedDB per song
@@ -99,6 +105,9 @@ export interface Song {
 	// Generated tracks leave this unset so the UI can distinguish a source
 	// recording from a local result without changing the server contract.
 	source?: 'upload' | 'generated';
+	// A known collection can provide a language anchor when the audio-only
+	// listener cannot separate Macedonian from nearby regional styles.
+	referenceLanguage?: 'auto' | 'mk';
 	// The caption returned by /understand is the reusable style prompt. Keep
 	// an explicit copy so a user can tell an analyzed reference from a track
 	// that merely happens to have a caption.

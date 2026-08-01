@@ -19,7 +19,7 @@
 		startServer,
 		stopServer
 	} from './lib/api.js';
-	import { getAllSongs } from './lib/db.js';
+	import { getAllSongs, putSong } from './lib/db.js';
 	import { METRICS_POLL_MS, PROPS_POLL_MS } from './lib/config.js';
 	import RequestForm from './components/RequestForm.svelte';
 	import ReferenceUploader from './components/ReferenceUploader.svelte';
@@ -42,6 +42,7 @@
 			? (app.metrics.vram.used / app.metrics.vram.total) * 100
 			: null
 	);
+	let memoryPercent = $derived(app.metrics?.memory?.available ? app.metrics.memory.usage : null);
 	type ServerState = 'on' | 'off' | 'starting' | 'unknown';
 	let serverState = $state<ServerState>('unknown');
 	let serverBusy = $state(false);
@@ -72,7 +73,33 @@
 
 	$effect(() => {
 		getAllSongs()
-			.then((songs) => (app.songs = songs.reverse()))
+			.then((songs) => {
+				const ordered = songs.reverse();
+				// Older local profiles were created before the provenance hint was
+				// available. The default collection mode is Macedonian because the
+				// current reference set comes from Pesna.org; Auto remains one click
+				// away for unrelated uploads.
+				for (const song of ordered) {
+					if (song.source !== 'upload') continue;
+					let changed = false;
+					if (!song.referenceLanguage) {
+						song.referenceLanguage = app.referenceLanguage;
+						changed = true;
+					}
+					if (song.referenceLanguage === 'mk' && song.request.vocal_language !== 'mk') {
+						song.request = { ...song.request, vocal_language: 'mk' };
+						changed = true;
+					}
+					if (song.referenceLanguage === 'auto' && song.request.vocal_language === 'mk') {
+						const request = { ...song.request };
+						delete request.vocal_language;
+						song.request = request;
+						changed = true;
+					}
+					if (changed && song.id != null) void putSong(song);
+				}
+				app.songs = ordered;
+			})
 			.catch(() => {});
 	});
 
@@ -316,6 +343,15 @@
 					detail={app.metrics?.vram.available
 						? `${formatBytes(app.metrics.vram.used)} / ${formatBytes(app.metrics.vram.total)}`
 						: 'Graphics memory is unavailable'}
+				/>
+				<SteamGauge
+					label="SYSTEM MEMORY"
+					kind="memory"
+					tone="orange"
+					value={memoryPercent}
+					detail={app.metrics?.memory?.available
+						? `${formatBytes(app.metrics.memory.used)} / ${formatBytes(app.metrics.memory.total)}`
+						: 'System memory is unavailable'}
 				/>
 			</div>
 		</section>
@@ -870,7 +906,7 @@
 	}
 	.steam-grid {
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-template-columns: repeat(4, minmax(0, 1fr));
 		gap: 0.75rem;
 	}
 	.metric-card {
@@ -1132,7 +1168,7 @@
 			grid-template-columns: repeat(2, 1fr);
 		}
 		.steam-grid {
-			grid-template-columns: repeat(3, minmax(8rem, 1fr));
+			grid-template-columns: repeat(4, minmax(8rem, 1fr));
 			overflow-x: auto;
 		}
 		.steam-grid :global(.steam-gauge) {

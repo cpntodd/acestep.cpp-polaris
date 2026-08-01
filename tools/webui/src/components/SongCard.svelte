@@ -46,11 +46,12 @@
 	function languageLabel(code: string | undefined): string {
 		if (!code) return '—';
 		const labels: Record<string, string> = {
+			en: 'English',
 			mk: 'Macedonian',
-			sr: 'Serbian',
-			bg: 'Bulgarian'
+			unknown: 'Unknown'
 		};
-		return labels[code.toLowerCase()] ? `${labels[code.toLowerCase()]} (${code})` : code;
+		const normalized = code.toLowerCase();
+		return labels[normalized] ? `${labels[normalized]} (${normalized})` : 'Unknown';
 	}
 
 	// "(variant task)" suffix rebuilt from the request, used for the card
@@ -138,7 +139,11 @@
 			const { requests } = await analyzeReferenceSong(
 				song,
 				app.request.lm_model as string,
-				app.request.synth_model as string
+				app.request.synth_model as string,
+				{
+					languageHint:
+						song.referenceLanguage === 'mk' || app.referenceLanguage === 'mk' ? 'mk' : undefined
+				}
 			);
 			if (song.id != null) await putSong($state.snapshot(song));
 			app.name = song.name;

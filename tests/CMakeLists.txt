@@ -23,3 +23,15 @@ target_include_directories(test-language PRIVATE
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/ggml/include
 )
+
+# test-language-id: smoke-test the embedded CPU Whisper listener against a
+# decoded WAV/MP3. The model path and audio path are supplied at runtime so
+# normal builds do not require the large optional speech model to be loaded.
+add_executable(test-language-id test-language-id.cpp)
+target_include_directories(test-language-id PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/ggml/include
+)
+target_link_libraries(test-language-id PRIVATE acestep-language-id)
+link_ggml_backends(test-language-id)

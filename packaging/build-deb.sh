@@ -72,6 +72,7 @@ install -m 0644 "${ROOT_DIR}/packaging/acestep-cpp.desktop" "${STAGE_DIR}/usr/sh
 install -m 0644 "${ROOT_DIR}/assets/acestep.svg" "${STAGE_DIR}/usr/share/icons/hicolor/scalable/apps/acestep-cpp.svg"
 install -m 0644 "${ROOT_DIR}/README.md" "${STAGE_DIR}/usr/share/doc/${PACKAGE_NAME}/README.md"
 install -m 0644 "${ROOT_DIR}/LICENSE" "${STAGE_DIR}/usr/share/doc/${PACKAGE_NAME}/LICENSE"
+install -m 0644 "${ROOT_DIR}/vendor/whisper/LICENSE" "${STAGE_DIR}/usr/share/doc/${PACKAGE_NAME}/WHISPER-LICENSE"
 
 for size in 16 24 32 48 64 128 256; do
     convert -background none "${ROOT_DIR}/assets/acestep.svg" -resize "${size}x${size}" \
@@ -89,8 +90,9 @@ Depends: bash, curl, xdg-utils, libvulkan1, libc6, libgcc-s1, libstdc++6, libgom
 Recommends: mesa-vulkan-drivers | nvidia-vulkan-icd | intel-media-va-driver
 Description: ACE-Step.cpp local AI music workstation
  A branded desktop launcher for cpntodd/acestep.cpp-polaris with the embedded WebUI,
- local reference workflow, production tools, and all GGUF models included in
- the build checkout. The server runs on localhost and opens the private UI.
+ local reference workflow, CPU-only English/Macedonian speech-language listener,
+ production tools, and all models included in the build checkout. The server
+ runs on localhost and opens the private UI.
 EOF
 
 cat >"${STAGE_DIR}/DEBIAN/postinst" <<'EOF'

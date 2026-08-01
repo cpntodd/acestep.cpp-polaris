@@ -17,6 +17,7 @@ interface ReferenceTemplateManifest {
 	seed: number;
 	duration: number;
 	request: AceRequest;
+	referenceLanguage?: Song['referenceLanguage'];
 	stylePrompt?: string;
 	analysisState?: Song['analysisState'];
 	analysisError?: string;
@@ -69,6 +70,7 @@ export async function exportReferenceTemplate(song: Song): Promise<Blob> {
 		seed: song.seed || 0,
 		duration: song.duration || song.request.duration || 0,
 		request: song.request,
+		referenceLanguage: song.referenceLanguage,
 		stylePrompt: song.stylePrompt,
 		analysisState: song.analysisState,
 		analysisError: song.analysisError,
@@ -141,6 +143,8 @@ export async function importReferenceTemplate(file: File): Promise<Song> {
 		request,
 		audio: blobFromBytes(audioBytes, format === 'wav' ? 'audio/wav' : 'audio/mpeg'),
 		source: 'upload',
+		referenceLanguage:
+			manifest.referenceLanguage === 'mk' || request.vocal_language === 'mk' ? 'mk' : 'auto',
 		stylePrompt,
 		analysisState,
 		analysisError: typeof manifest.analysisError === 'string' ? manifest.analysisError : undefined,

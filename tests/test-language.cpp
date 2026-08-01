@@ -55,8 +55,8 @@ int main() {
     if (!parse_cot_and_lyrics(bg_text, &bulgarian)) {
         return fail("Bulgarian fixture did not parse");
     }
-    if (bulgarian.vocal_language != "bg") {
-        return fail("Bulgarian language was incorrectly changed");
+    if (bulgarian.vocal_language != "unknown") {
+        return fail("Unsupported Bulgarian language was not constrained to unknown");
     }
 
     AcePrompt explicit_macedonian = {};
@@ -123,6 +123,21 @@ int main() {
     }
     if (named_macedonian.vocal_language != "mk") {
         return fail("Named Macedonian language was not canonicalized to mk");
+    }
+
+    AcePrompt hinted_macedonian = {};
+    hinted_macedonian.caption =
+        "An energetic and devotional Indian bhajan with Turkish folk and Middle Eastern scales, oud, tabla, and ney flute.";
+    hinted_macedonian.vocal_language = "sa";
+    apply_language_hint("Macedonian (mk)", &hinted_macedonian);
+    if (hinted_macedonian.vocal_language != "mk" ||
+        hinted_macedonian.caption.find("Macedonian") == std::string::npos ||
+        hinted_macedonian.caption.find("Indian") != std::string::npos ||
+        hinted_macedonian.caption.find("Turkish") != std::string::npos ||
+        hinted_macedonian.caption.find("Middle Eastern") != std::string::npos ||
+        hinted_macedonian.caption.find("tabla") != std::string::npos ||
+        hinted_macedonian.caption.find("ney") != std::string::npos) {
+        return fail("Explicit Macedonian hint did not clean the regional style caption");
     }
 
     fprintf(stderr, "[Test] PASS\n");

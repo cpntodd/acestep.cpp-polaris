@@ -105,6 +105,19 @@ static bool sample_windows_cpu(double & usage) {
     previous_total = total;
     return true;
 }
+
+static void sample_windows_memory(AceSystemMetrics & metrics) {
+    MEMORYSTATUSEX status = {};
+    status.dwLength = sizeof(status);
+    if (!GlobalMemoryStatusEx(&status) || status.ullTotalPhys == 0) {
+        return;
+    }
+    metrics.memory_total = static_cast<std::size_t>(status.ullTotalPhys);
+    metrics.memory_used = static_cast<std::size_t>(status.ullTotalPhys - status.ullAvailPhys);
+    metrics.memory_usage = clamp_percent(static_cast<double>(metrics.memory_used) * 100.0 /
+                                         static_cast<double>(metrics.memory_total));
+    metrics.memory_available = true;
+}
 #endif
 
 static void sample_cpu(AceSystemMetrics & metrics) {
@@ -120,6 +133,29 @@ static void sample_cpu(AceSystemMetrics & metrics) {
 #endif
     metrics.cpu_cores = std::thread::hardware_concurrency();
 }
+
+#ifdef __linux__
+static void sample_linux_memory(AceSystemMetrics & metrics) {
+    std::ifstream meminfo("/proc/meminfo");
+    std::uint64_t total_kib = 0;
+    std::uint64_t available_kib = 0;
+    std::string   label;
+    std::uint64_t value = 0;
+    std::string   unit;
+    while (meminfo >> label >> value >> unit) {
+        if (label == "MemTotal:") total_kib = value;
+        if (label == "MemAvailable:") available_kib = value;
+    }
+    if (total_kib == 0 || available_kib > total_kib) {
+        return;
+    }
+    metrics.memory_total = static_cast<std::size_t>(total_kib * 1024ULL);
+    metrics.memory_used = static_cast<std::size_t>((total_kib - available_kib) * 1024ULL);
+    metrics.memory_usage = clamp_percent(static_cast<double>(metrics.memory_used) * 100.0 /
+                                         static_cast<double>(metrics.memory_total));
+    metrics.memory_available = true;
+}
+#endif
 
 static void sample_ggml_devices(AceSystemMetrics & metrics) {
     const std::size_t device_count = ggml_backend_dev_count();
@@ -275,6 +311,11 @@ static bool sample_nvidia_smi(AceSystemMetrics & metrics) {
 AceSystemMetrics system_metrics_sample() {
     AceSystemMetrics metrics;
     sample_cpu(metrics);
+#ifdef __linux__
+    sample_linux_memory(metrics);
+#elif defined(_WIN32)
+    sample_windows_memory(metrics);
+#endif
     sample_ggml_devices(metrics);
 #ifdef __linux__
     sample_linux_drm(metrics);

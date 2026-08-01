@@ -369,14 +369,18 @@ export function understandSubmit(
 	audio: Blob | null,
 	srcLatents: Blob | null,
 	lmModel?: string,
-	synthModel?: string
+	synthModel?: string,
+	vocalLanguage?: string
 ): Promise<string> {
 	const form = new FormData();
+	// Send both when available: cached latents keep ACE-Step fast, while the
+	// dedicated local speech listener still needs the original PCM/audio.
 	if (srcLatents) form.append('src_latents', srcLatents, 'src.latents');
-	else if (audio) form.append('audio', audio, 'input.audio');
+	if (audio) form.append('audio', audio, 'input.audio');
 	const fields: Record<string, string> = {};
 	if (lmModel) fields.lm_model = lmModel;
 	if (synthModel) fields.synth_model = synthModel;
+	if (vocalLanguage) fields.vocal_language = vocalLanguage;
 	if (Object.keys(fields).length > 0) {
 		form.append(
 			'request',

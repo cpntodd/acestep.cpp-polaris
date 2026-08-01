@@ -16,3 +16,11 @@ Or use the download script:
 ```bash
 ./models.sh
 ```
+
+## Local speech-language listener
+
+Reference analysis can use the CPU-only Whisper language listener. Download
+`ggml-large-v3-turbo-q5_0.bin` from
+https://huggingface.co/ggerganov/whisper.cpp/tree/main and place it beside the
+GGUF files. The server discovers it automatically. Only `en`, `mk`, and
+`unknown` are exposed by this application.

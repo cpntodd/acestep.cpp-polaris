@@ -183,21 +183,37 @@ static void normalize_macedonian_caption(AcePrompt * out) {
     if (out->vocal_language != "mk") {
         return;
     }
+    // The listener often recognizes the shared instrumentation before it
+    // recognizes the language. Replace the regional guesses first, while
+    // keeping the audible arrangement details that are still useful to the
+    // composer. Longer phrases must come before their shorter components.
+    replace_ascii_insensitive(out->caption, "Indian bhajan", "Macedonian devotional folk song");
+    replace_ascii_insensitive(out->caption, "Indian classical", "Macedonian folk");
+    replace_ascii_insensitive(out->caption, "Indian-inspired", "Macedonian/Balkan-inspired");
+    replace_ascii_insensitive(out->caption, "Anatolian folk", "Macedonian/Balkan folk");
+    replace_ascii_insensitive(out->caption, "Anatolian", "Macedonian/Balkan");
+    replace_ascii_insensitive(out->caption, "Middle Eastern scales", "Macedonian/Balkan folk modes");
+    replace_ascii_insensitive(out->caption, "Middle Eastern", "Macedonian/Balkan");
     replace_ascii_insensitive(out->caption, "Eastern European or Turkish folk", "Macedonian/Balkan folk");
     replace_ascii_insensitive(out->caption, "Eastern European/Turkish folk", "Macedonian/Balkan folk");
     replace_ascii_insensitive(out->caption, "Balkan or Turkish folk", "Macedonian/Balkan folk");
     replace_ascii_insensitive(out->caption, "Turkish-style folk", "Macedonian/Balkan folk");
     replace_ascii_insensitive(out->caption, "Turkish folk", "Macedonian/Balkan folk");
     replace_ascii_insensitive(out->caption, "Indian folk", "Macedonian/Balkan folk");
-    replace_ascii_insensitive(out->caption, "Indian classical", "Macedonian/Balkan folk");
-    replace_ascii_insensitive(out->caption, "Indian-inspired", "Macedonian/Balkan-inspired");
+    replace_ascii_insensitive(out->caption, "bhajan", "devotional folk");
     replace_ascii_insensitive(out->caption, "Eastern European", "Macedonian/Balkan");
     replace_ascii_insensitive(out->caption, "Turkish", "Macedonian/Balkan");
     replace_ascii_insensitive(out->caption, "Indian", "Macedonian/Balkan");
+    replace_ascii_insensitive(out->caption, "duduk-like", "Balkan reed-like");
+    replace_ascii_insensitive(out->caption, "ney-like flute", "Balkan reed flute");
+    replace_ascii_insensitive(out->caption, "ney flute", "Balkan reed flute");
+    replace_ascii_insensitive(out->caption, "darbuka", "hand drums");
+    replace_ascii_insensitive(out->caption, "tabla", "hand drums");
+    replace_ascii_insensitive(out->caption, "oud", "plucked lute");
     if (out->caption.empty()) {
         out->caption = "Macedonian-language Balkan folk music";
     } else if (!caption_mentions_macedonian(out->caption)) {
-        out->caption = "Macedonian-language " + out->caption;
+        out->caption = "Macedonian folk from North Macedonia; Macedonian-language " + out->caption;
     }
 }
 
@@ -215,11 +231,32 @@ static std::string canonicalize_language_hint(std::string language) {
             ch = (char) (ch - 'A' + 'a');
         }
     }
+    if (language == "english" || language == "english (en)" || language == "eng") {
+        return "en";
+    }
     if (language == "macedonian" || language == "macedonian (mk)" || language == "mkd" ||
         language == "mac") {
         return "mk";
     }
     return language;
+}
+
+// Apply a provenance/user language hint after the audio-only listener has
+// decoded its result. This is shared by the live understand pipeline and the
+// parser tests so an explicit Macedonian collection hint cannot be lost when
+// the model emits sr/bg/tr/sa/zxx or another nearby guess.
+static void apply_language_hint(const std::string & hint, AcePrompt * out) {
+    std::string language = canonicalize_language_hint(hint);
+    if (language.empty()) {
+        return;
+    }
+    if (language != "en" && language != "mk" && language != "unknown") {
+        language = "unknown";
+    }
+    out->vocal_language = language;
+    if (language == "mk") {
+        normalize_macedonian_caption(out);
+    }
 }
 
 static void normalize_detected_language(const std::string & cot, const std::string & lyrics, AcePrompt * out) {
@@ -232,6 +269,9 @@ static void normalize_detected_language(const std::string & cot, const std::stri
         return;
     }
     out->vocal_language = canonicalize_language_hint(out->vocal_language);
+    if (out->vocal_language != "en" && out->vocal_language != "mk" && out->vocal_language != "unknown") {
+        out->vocal_language = "unknown";
+    }
     if (out->vocal_language == "mk") {
         normalize_macedonian_caption(out);
     }
