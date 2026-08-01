@@ -28,8 +28,11 @@ For local reference-language detection, also place
 `ggml-large-v3-turbo-q5_0.bin` from the official whisper.cpp model collection in
 `models/`. The bundled listener uses it locally on voice-active windows and
 returns only English (`en`), Macedonian (`mk`), or `unknown`; it does not send
-audio to a remote service. The Debian bundle includes this model when it is
-present in the checkout.
+audio to a remote service. CPU is the safe default so the listener does not
+compete with ACE-Step for VRAM. If your Vulkan card has room, opt in with
+`ACESTEP_LANGUAGE_GPU=1 ./server.sh` or `--language-gpu`; this uses the same
+local GGML Vulkan backend as ACE-Step. The Debian bundle includes this model
+when it is present in the checkout.
 
 ## Build
 
@@ -93,11 +96,11 @@ package supervisor keeps that switch usable after a crash or an intentional
 stop; `acestep-cpp-stop` is also available as a terminal fallback.
 
 The amd64 build uses Release optimizations, native CPU instructions, and the
-Vulkan backend when available. CPU work defaults to one worker per physical
-core; set `ACESTEP_CPU_THREADS=6` before launching if you want to pin this
-Ryzen 5 2600 profile explicitly. The RX 580 is selected automatically by the
+Vulkan backend when available. The RX 580 is selected automatically by the
 Vulkan backend. GPU drivers remain host dependencies because kernel/device
-drivers cannot be safely embedded in a Debian application.
+drivers cannot be safely embedded in a Debian application. The packaged
+launcher inherits `ACESTEP_LANGUAGE_GPU=1` if you choose to enable GPU
+language detection; leave it unset for the safer CPU listener.
 
 ### Reference tracks
 

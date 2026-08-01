@@ -163,18 +163,21 @@ static int whisper_window_language(whisper_context * context, const float * pcm,
 struct AceLanguageIdentifier {
     whisper_context * context = nullptr;
     int               threads = 4;
+    bool              use_gpu = false;
     std::mutex        mutex;
 };
 
-AceLanguageIdentifier * ace_language_id_create(const char * model_path, int n_threads) {
+AceLanguageIdentifier * ace_language_id_create(const char * model_path, int n_threads, bool use_gpu) {
     if (!model_path || !*model_path) return nullptr;
     auto * identifier = new AceLanguageIdentifier();
     identifier->threads = n_threads > 0 ? n_threads : std::max(1u, std::min(8u, std::thread::hardware_concurrency()));
+    identifier->use_gpu = use_gpu;
 
     whisper_context_params params = whisper_context_default_params();
-    // Keep the dedicated listener on CPU so it does not compete with the
-    // music model for VRAM. GGML still uses the optimized local CPU backend.
-    params.use_gpu = false;
+    // CPU is the safe default because ACE-Step may already occupy most of the
+    // card. The explicit GPU option uses the same GGML Vulkan backend as the
+    // rest of the application when the caller has enough VRAM headroom.
+    params.use_gpu = use_gpu;
     params.flash_attn = false;
     identifier->context = whisper_init_from_file_with_params(model_path, params);
     if (!identifier->context) {
@@ -182,7 +185,8 @@ AceLanguageIdentifier * ace_language_id_create(const char * model_path, int n_th
         delete identifier;
         return nullptr;
     }
-    fprintf(stderr, "[Language-ID] Ready: Whisper %s (%d CPU threads)\n", whisper_version(), identifier->threads);
+    fprintf(stderr, "[Language-ID] Ready: Whisper %s (backend=%s, %d CPU threads)\n", whisper_version(),
+            use_gpu ? "Vulkan/GGML" : "CPU/GGML", identifier->threads);
     return identifier;
 }
 

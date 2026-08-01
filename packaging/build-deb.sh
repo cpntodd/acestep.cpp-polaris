@@ -8,6 +8,7 @@ DIST_DIR="${ROOT_DIR}/dist"
 PACKAGE_NAME="acestep-cpp"
 ARCH="$(dpkg --print-architecture)"
 VERSION="${ACE_STEP_VERSION:-0.1.0+git$(git -C "${ROOT_DIR}" rev-parse --short HEAD)}"
+DEB_COMPRESSION_LEVEL="${ACE_DEB_COMPRESSION_LEVEL:-19}"
 # The full model bundle is larger than the default 7.8 GiB tmpfs on some
 # desktop systems. Stage beside the checkout on the same disk as the output.
 STAGE_DIR="$(mktemp -d "${ROOT_DIR}/.deb-stage.XXXXXXXX")"
@@ -90,7 +91,8 @@ Depends: bash, curl, xdg-utils, libvulkan1, libc6, libgcc-s1, libstdc++6, libgom
 Recommends: mesa-vulkan-drivers | nvidia-vulkan-icd | intel-media-va-driver
 Description: ACE-Step.cpp local AI music workstation
  A branded desktop launcher for cpntodd/acestep.cpp-polaris with the embedded WebUI,
- local reference workflow, CPU-only English/Macedonian speech-language listener,
+ local reference workflow, English/Macedonian speech-language listener (CPU by
+ default, with optional local Vulkan mode),
  production tools, and all models included in the build checkout. The server
  runs on localhost and opens the private UI.
 EOF
@@ -112,6 +114,6 @@ mkdir -p "${DIST_DIR}"
 OUTPUT="${DIST_DIR}/${PACKAGE_NAME}_${VERSION}_${ARCH}.deb"
 rm -f "${OUTPUT}"
 echo "[deb] building ${OUTPUT}"
-dpkg-deb --build --root-owner-group --compression=zstd --compression-level=1 "${STAGE_DIR}" "${OUTPUT}"
+dpkg-deb --build --root-owner-group --compression=zstd --compression-level="${DEB_COMPRESSION_LEVEL}" "${STAGE_DIR}" "${OUTPUT}"
 echo "[deb] complete: ${OUTPUT}"
 du -h "${OUTPUT}"

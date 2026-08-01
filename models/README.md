@@ -19,8 +19,10 @@ Or use the download script:
 
 ## Local speech-language listener
 
-Reference analysis can use the CPU-only Whisper language listener. Download
+Reference analysis uses a local Whisper language listener. It runs on CPU by
+default so it does not compete with ACE-Step for VRAM. Download
 `ggml-large-v3-turbo-q5_0.bin` from
 https://huggingface.co/ggerganov/whisper.cpp/tree/main and place it beside the
 GGUF files. The server discovers it automatically. Only `en`, `mk`, and
-`unknown` are exposed by this application.
+`unknown` are exposed by this application. To opt into the shared Vulkan
+backend, start the server with `ACESTEP_LANGUAGE_GPU=1` or `--language-gpu`.

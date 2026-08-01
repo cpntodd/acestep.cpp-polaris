@@ -3,14 +3,16 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 
 int main(int argc, char ** argv) {
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <whisper-model.bin> <audio.wav|audio.mp3>\n", argv[0]);
+    if (argc < 3 || argc > 4) {
+        fprintf(stderr, "Usage: %s <whisper-model.bin> <audio.wav|audio.mp3> [--gpu]\n", argv[0]);
         return 2;
     }
 
-    AceLanguageIdentifier * identifier = ace_language_id_create(argv[1]);
+    const bool use_gpu = argc == 4 && std::string(argv[3]) == "--gpu";
+    AceLanguageIdentifier * identifier = ace_language_id_create(argv[1], 0, use_gpu);
     if (!identifier) return 1;
 
     int     samples_per_channel = 0;

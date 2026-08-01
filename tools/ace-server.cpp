@@ -183,13 +183,15 @@ static ModelStore * g_store = nullptr;
 // model registry (populated at startup from GGUF metadata)
 static ModelRegistry g_registry;
 
-// Dedicated CPU language recognizer. It is lazy-loaded on the first raw-audio
-// understand request so server startup stays fast, then reused for the local
-// reference library. Cached-latent requests still carry their original audio
-// when the WebUI wants language identification.
+// Dedicated local language recognizer. It is lazy-loaded on the first
+// raw-audio understand request so server startup stays fast, then reused for
+// the local reference library. CPU is the safe default; --language-gpu or
+// ACESTEP_LANGUAGE_GPU=1 opts into the shared Vulkan device. Cached-latent
+// requests still carry their original audio when the WebUI wants language ID.
 static std::string            g_language_model_path;
 static AceLanguageIdentifier *g_language_identifier = nullptr;
 static bool                   g_language_id_attempted = false;
+static bool                   g_language_use_gpu = false;
 
 // loaded model names (empty = nothing loaded)
 static std::string g_loaded_lm;
@@ -1089,7 +1091,7 @@ static void understand_worker(std::shared_ptr<Job> job,
     if (src_interleaved && !g_language_model_path.empty()) {
         if (!g_language_id_attempted) {
             g_language_id_attempted = true;
-            g_language_identifier = ace_language_id_create(g_language_model_path.c_str());
+            g_language_identifier = ace_language_id_create(g_language_model_path.c_str(), 0, g_language_use_gpu);
         }
         if (g_language_identifier) {
             AceLanguageResult language_result;
@@ -1677,7 +1679,10 @@ static void usage(const char * prog) {
             "\n"
             "Adapter:\n"
             "  --adapters <dir>        Directory of adapters\n"
+            "\n"
+            "Language detection:\n"
             "  --language-model <file> Local multilingual speech model for language ID\n"
+            "  --language-gpu          Run the local language listener on Vulkan (uses VRAM)\n"
             "\n"
             "Memory control:\n"
             "  --keep-loaded           Keep models in VRAM between requests\n"
@@ -1708,6 +1713,11 @@ int main(int argc, char ** argv) {
     const char * adapters_dir = nullptr;
     const char * language_model = nullptr;
 
+    const char * language_gpu_env = getenv("ACESTEP_LANGUAGE_GPU");
+    g_language_use_gpu = language_gpu_env &&
+                          (!strcmp(language_gpu_env, "1") || !strcmp(language_gpu_env, "true") ||
+                           !strcmp(language_gpu_env, "yes") || !strcmp(language_gpu_env, "on"));
+
     if (argc < 2) {
         usage(argv[0]);
         return 1;
@@ -1720,6 +1730,8 @@ int main(int argc, char ** argv) {
             adapters_dir = argv[++i];
         } else if (!strcmp(argv[i], "--language-model") && i + 1 < argc) {
             language_model = argv[++i];
+        } else if (!strcmp(argv[i], "--language-gpu")) {
+            g_language_use_gpu = true;
         } else if (!strcmp(argv[i], "--max-seq") && i + 1 < argc) {
             g_lm_params.max_seq = atoi(argv[++i]);
 
@@ -1774,8 +1786,9 @@ int main(int argc, char ** argv) {
         fprintf(stderr, "[Server] WARNING: speech language model not found: %s\n", g_language_model_path.c_str());
         g_language_model_path.clear();
     }
-    fprintf(stderr, "[Server] Speech language ID: %s\n",
-            g_language_model_path.empty() ? "unavailable (unknown fallback)" : g_language_model_path.c_str());
+    fprintf(stderr, "[Server] Speech language ID: %s (backend=%s)\n",
+            g_language_model_path.empty() ? "unavailable (unknown fallback)" : g_language_model_path.c_str(),
+            g_language_use_gpu ? "Vulkan/GGML (opt-in)" : "CPU/GGML (default)");
 
     // stderr capture for SSE /logs (must be after arg parsing so --help prints directly)
     LogCapture log_capture;

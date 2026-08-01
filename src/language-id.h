@@ -18,7 +18,9 @@ struct AceLanguageResult {
     int         voice_windows = 0;
 };
 
-AceLanguageIdentifier * ace_language_id_create(const char * model_path, int n_threads = 0);
+AceLanguageIdentifier * ace_language_id_create(const char * model_path,
+                                               int         n_threads = 0,
+                                               bool        use_gpu   = false);
 void                   ace_language_id_free(AceLanguageIdentifier * identifier);
 
 // samples are interleaved stereo 48 kHz [L0,R0,L1,R1,...]. The recognizer
