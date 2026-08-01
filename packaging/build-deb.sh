@@ -8,7 +8,12 @@ DIST_DIR="${ROOT_DIR}/dist"
 PACKAGE_NAME="acestep-cpp"
 ARCH="$(dpkg --print-architecture)"
 VERSION="${ACE_STEP_VERSION:-0.1.0+git$(git -C "${ROOT_DIR}" rev-parse --short HEAD)}"
-DEB_COMPRESSION_LEVEL="${ACE_DEB_COMPRESSION_LEVEL:-19}"
+DEB_COMPRESSION="${ACE_DEB_COMPRESSION:-xz}"
+DEB_COMPRESSION_LEVEL="${ACE_DEB_COMPRESSION_LEVEL:-9}"
+# xz is single-threaded unless requested otherwise. The full model bundle is
+# large, so use all available cores by default while still allowing callers to
+# provide their own XZ_OPT policy.
+export XZ_OPT="${XZ_OPT:--threads=0}"
 # The full model bundle is larger than the default 7.8 GiB tmpfs on some
 # desktop systems. Stage beside the checkout on the same disk as the output.
 STAGE_DIR="$(mktemp -d "${ROOT_DIR}/.deb-stage.XXXXXXXX")"
@@ -114,6 +119,6 @@ mkdir -p "${DIST_DIR}"
 OUTPUT="${DIST_DIR}/${PACKAGE_NAME}_${VERSION}_${ARCH}.deb"
 rm -f "${OUTPUT}"
 echo "[deb] building ${OUTPUT}"
-dpkg-deb --build --root-owner-group --compression=zstd --compression-level="${DEB_COMPRESSION_LEVEL}" "${STAGE_DIR}" "${OUTPUT}"
+dpkg-deb --build --root-owner-group --compression="${DEB_COMPRESSION}" --compression-level="${DEB_COMPRESSION_LEVEL}" "${STAGE_DIR}" "${OUTPUT}"
 echo "[deb] complete: ${OUTPUT}"
 du -h "${OUTPUT}"
