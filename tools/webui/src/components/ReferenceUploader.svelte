@@ -2,17 +2,19 @@
 	import { Archive, AudioLines, LockKeyhole, ScanLine, Upload, WandSparkles } from '@lucide/svelte';
 	import { app, setRequest, toast } from '../lib/state.svelte.js';
 	import { putSong } from '../lib/db.js';
+	import { cancelJob } from '../lib/api.js';
 	import { analyzeReferenceSong, isReferenceAudio, storeReferenceTrack } from '../lib/reference.js';
 	import { importReferenceTemplate, isReferenceTemplate } from '../lib/template.js';
+	import type { Song } from '../lib/types.js';
 
 	let input: HTMLInputElement;
 	let templateInput: HTMLInputElement;
 	let dragging = $state(false);
 	let importing = $state(false);
 	let analyzingBatch = $state(false);
-	let batchTargets = $derived(
-		app.songs.filter((song) => song.source === 'upload' && song.analysisState !== 'ready').length
-	);
+	let batchStopRequested = $state(false);
+	let activeBatchJobId = $state<string | null>(null);
+	let referenceCount = $derived(app.songs.filter((song) => song.source === 'upload').length);
 
 	async function importFile(file: File | undefined) {
 		if (!file) return;
@@ -25,7 +27,7 @@
 				app.pendingRequests = [];
 				app.pendingIndex = 0;
 				setRequest({ ...song.request, task_type: 'cover' });
-				app.srcSongId = song.id ?? null;
+				app.srcSongIds = song.id != null ? [song.id] : [];
 				toast(`${song.name} template imported and armed`, 4200, true);
 			} catch (error: unknown) {
 				toast(error instanceof Error ? error.message : String(error));
@@ -44,7 +46,7 @@
 			const song = await storeReferenceTrack(file);
 			app.songs.unshift(song);
 			app.name = song.name;
-			app.srcSongId = song.id ?? null;
+			app.srcSongIds = song.id != null ? [song.id] : [];
 			app.request.task_type = 'cover';
 			toast(`${song.name} is ready to analyze`, 4200, true);
 		} catch (error: unknown) {
@@ -55,46 +57,108 @@
 		}
 	}
 
-	function onDrop(event: DragEvent) {
-		event.preventDefault();
-		dragging = false;
-		void importFile(event.dataTransfer?.files?.[0]);
-	}
-
-	async function analyzeBatch() {
-		const targets = app.songs.filter(
-			(song) =>
-				song.source === 'upload' &&
-				song.analysisState !== 'ready' &&
-				song.analysisState !== 'analyzing'
-		);
-		if (targets.length === 0) {
-			toast('All saved reference songs already have a style profile.', 3200, true);
+	async function importFiles(files: FileList | File[] | null | undefined) {
+		const selected = Array.from(files ?? []);
+		if (selected.length === 0) return;
+		if (selected.length === 1) {
+			await importFile(selected[0]);
 			return;
 		}
-		analyzingBatch = true;
-		let completed = 0;
+		if (selected.some(isReferenceTemplate)) {
+			toast('Import template ZIPs one at a time. MP3/WAV files can be added together.');
+			return;
+		}
+
+		importing = true;
+		const added: Song[] = [];
 		let failed = 0;
 		try {
-			for (const song of targets) {
+			for (const file of selected) {
+				if (!isReferenceAudio(file)) {
+					failed++;
+					continue;
+				}
 				try {
-					await analyzeReferenceSong(
-						song,
-						app.request.lm_model as string,
-						app.request.synth_model as string
-					);
-					if (song.id != null) await putSong($state.snapshot(song));
-					completed++;
+					added.push(await storeReferenceTrack(file));
 				} catch {
 					failed++;
 				}
 			}
+			for (const song of added) app.songs.unshift(song);
+			if (added.length > 0) {
+				app.name = added[0].name;
+				app.srcSongIds = added.map((song) => song.id).filter((id): id is number => id != null);
+				app.request.task_type = 'cover';
+			}
 			toast(
-				`Finished: ${completed} analyzed${failed ? `, ${failed} could not be read` : ''}.`,
+				`${added.length} reference ${added.length === 1 ? 'song' : 'songs'} saved${
+					failed ? `, ${failed} skipped` : ''
+				}. They are selected together as source material.`,
 				5000,
 				failed === 0
 			);
 		} finally {
+			importing = false;
+			if (input) input.value = '';
+		}
+	}
+
+	function onDrop(event: DragEvent) {
+		event.preventDefault();
+		dragging = false;
+		void importFiles(event.dataTransfer?.files);
+	}
+
+	function stopBatch() {
+		batchStopRequested = true;
+		if (activeBatchJobId) void cancelJob(activeBatchJobId).catch(() => {});
+	}
+
+	async function analyzeBatch() {
+		// Re-read every reference, including profiles made before the
+		// Macedonian-aware listener was updated. Existing local songs can refresh
+		// their language and style DNA without being uploaded again.
+		const targets = app.songs.filter(
+			(song) => song.source === 'upload' && song.analysisState !== 'analyzing'
+		);
+		if (targets.length === 0) {
+			toast('No saved reference songs are available to refresh.', 3200, true);
+			return;
+		}
+		analyzingBatch = true;
+		batchStopRequested = false;
+		let completed = 0;
+		let failed = 0;
+		try {
+			for (const song of targets) {
+				if (batchStopRequested) break;
+				try {
+					await analyzeReferenceSong(
+						song,
+						app.request.lm_model as string,
+						app.request.synth_model as string,
+						{
+							onJobId: (id) => (activeBatchJobId = id),
+							isCancelled: () => batchStopRequested
+						}
+					);
+					if (song.id != null) await putSong($state.snapshot(song));
+					completed++;
+				} catch {
+					if (batchStopRequested) break;
+					failed++;
+				}
+				activeBatchJobId = null;
+			}
+			toast(
+				batchStopRequested
+					? `Stopped after refreshing ${completed} reference ${completed === 1 ? 'song' : 'songs'}.`
+					: `Finished: ${completed} analyzed${failed ? `, ${failed} could not be read` : ''}.`,
+				5000,
+				!batchStopRequested && failed === 0
+			);
+		} finally {
+			activeBatchJobId = null;
 			analyzingBatch = false;
 		}
 	}
@@ -116,8 +180,9 @@
 		bind:this={input}
 		type="file"
 		accept=".mp3,.wav,audio/mpeg,audio/wav"
+		multiple
 		hidden
-		onchange={(event) => void importFile(event.currentTarget.files?.[0])}
+		onchange={(event) => void importFiles(event.currentTarget.files)}
 	/>
 	<input
 		bind:this={templateInput}
@@ -134,7 +199,7 @@
 	</div>
 	<div class="upload-actions">
 		<button class="upload-button" type="button" onclick={() => input.click()} disabled={importing}>
-			{#if importing}<WandSparkles size={15} /> Saving{:else}<Upload size={15} /> Add a song{/if}
+			{#if importing}<WandSparkles size={15} /> Saving{:else}<Upload size={15} /> Add songs{/if}
 		</button>
 		<button
 			class="template-button"
@@ -146,18 +211,18 @@
 			<Archive size={14} /> Import template
 		</button>
 	</div>
-	{#if batchTargets > 0}
+	{#if referenceCount > 0}
 		<button
 			class="batch-analyze"
 			type="button"
-			disabled={analyzingBatch || importing}
-			onclick={analyzeBatch}
-			title="Read every saved reference song one at a time and save its style, lyrics, tempo, key, and settings"
+			disabled={importing}
+			onclick={analyzingBatch ? stopBatch : analyzeBatch}
+			title="Read every saved reference song again, one at a time, and refresh its style, language, lyrics, tempo, key, and settings"
 		>
 			<ScanLine size={14} />
 			{analyzingBatch
-				? 'Reading saved songs…'
-				: `Read ${batchTargets} saved ${batchTargets === 1 ? 'style' : 'styles'}`}
+				? 'Stop reading'
+				: `Refresh ${referenceCount} saved ${referenceCount === 1 ? 'style' : 'styles'}`}
 		</button>
 	{/if}
 	<div class="upload-note" title="Your reference audio stays in this browser's local storage">

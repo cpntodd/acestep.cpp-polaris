@@ -55,7 +55,7 @@ export const app = $state({
 	pendingRequests: [] as AceRequest[],
 	pendingIndex: 0,
 	refSongId: null as number | null,
-	srcSongId: null as number | null,
+	srcSongIds: [] as number[],
 	srcRangeStart: null as number | null,
 	srcRangeEnd: null as number | null
 });

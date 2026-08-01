@@ -60,7 +60,10 @@ inline constexpr const char * LM_FORMAT_INSTRUCTION =
 
 // Understand system instruction (Listener: audio codes -> metadata + lyrics)
 inline constexpr const char * LM_UNDERSTAND_INSTRUCTION =
-    "Understand the given musical conditions and describe the audio semantics accordingly:";
+    "Understand the given musical conditions and describe the audio semantics accordingly. Detect the exact "
+    "vocal language. Macedonian is ISO-639-1 mk and is its own language: never substitute Serbian sr or "
+    "Bulgarian bg for Macedonian. Use mk when the singing is Macedonian, and use unknown only when there are "
+    "no vocals or the language cannot be determined:";
 
 // LM generation modes
 #define LM_MODE_GENERATE 0  // full: metadata + lyrics + audio codes

@@ -43,7 +43,11 @@ export async function storeReferenceTrack(file: File): Promise<Song> {
 export async function analyzeReferenceSong(
 	song: Song,
 	lmModel?: string,
-	synthModel?: string
+	synthModel?: string,
+	options?: {
+		onJobId?: (id: string) => void;
+		isCancelled?: () => boolean;
+	}
 ): Promise<{ requests: Song['request'][] }> {
 	if (song.source !== 'upload') throw new Error('Only reference tracks can be analyzed');
 	song.analysisState = 'analyzing';
@@ -55,6 +59,8 @@ export async function analyzeReferenceSong(
 			lmModel,
 			synthModel
 		);
+		options?.onJobId?.(jobId);
+		if (options?.isCancelled?.()) throw new Error('Analysis stopped');
 		await pollJob(jobId);
 		const { requests, latents } = await jobResultUnderstand(jobId);
 		if (requests.length === 0) throw new Error('The style reader returned no result');
@@ -77,8 +83,13 @@ export async function analyzeReferenceSong(
 		song.analyzedAt = Date.now();
 		return { requests };
 	} catch (error) {
-		song.analysisState = 'error';
-		song.analysisError = error instanceof Error ? error.message : String(error);
+		if (options?.isCancelled?.()) {
+			song.analysisState = 'unscanned';
+			song.analysisError = '';
+		} else {
+			song.analysisState = 'error';
+			song.analysisError = error instanceof Error ? error.message : String(error);
+		}
 		throw error;
 	}
 }

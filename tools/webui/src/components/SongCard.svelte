@@ -35,9 +35,11 @@
 	let dur = $state(0);
 	let rangeStart = $state(0);
 	let rangeEnd = $state(0);
+	let editingStyle = $state(false);
+	let styleDraft = $state('');
 
 	let isRef = $derived(app.refSongId === song.id);
-	let isSrc = $derived(app.srcSongId === song.id);
+	let isSrc = $derived(song.id != null && app.srcSongIds.includes(song.id));
 	let isReference = $derived(song.source === 'upload');
 	let hasStyleProfile = $derived(!!song.stylePrompt || song.analysisState === 'ready');
 
@@ -56,16 +58,23 @@
 	let displayName = $derived(displaySongName(song));
 
 	function toggleSrc() {
-		if (isSrc) {
-			app.srcSongId = null;
+		if (song.id == null) return;
+		const next = isSrc
+			? app.srcSongIds.filter((id) => id !== song.id)
+			: [...app.srcSongIds, song.id];
+		app.srcSongIds = next;
+		if (next.length === 0) {
 			app.srcRangeStart = null;
 			app.srcRangeEnd = null;
 			rangeStart = 0;
 			rangeEnd = 0;
 		} else {
-			app.srcSongId = song.id ?? null;
 			app.request.task_type = 'cover';
-			toast('Source context armed — Cover mode enabled', 2800, true);
+			toast(
+				`${next.length} source ${next.length === 1 ? 'song' : 'songs'} combined — Cover mode enabled`,
+				2800,
+				true
+			);
 		}
 	}
 
@@ -157,6 +166,27 @@
 		app.pendingRequests = [];
 		app.pendingIndex = 0;
 		toast('Style profile copied to Compose', 2800, true);
+	}
+
+	function editStyle() {
+		styleDraft = song.stylePrompt || song.request.caption || '';
+		editingStyle = true;
+	}
+
+	async function saveStyle() {
+		const value = styleDraft.trim();
+		if (!value) {
+			toast('Add a style description before saving');
+			return;
+		}
+		song.stylePrompt = value;
+		song.caption = value;
+		song.request.caption = value;
+		song.analysisState = 'ready';
+		song.analysisError = '';
+		if (song.id != null) await putSong($state.snapshot(song));
+		editingStyle = false;
+		toast('Discovered style updated', 2800, true);
 	}
 
 	function downloadAudio() {
@@ -253,7 +283,7 @@
 	async function doRemove() {
 		if (song.id == null) return;
 		if (app.refSongId === song.id) app.refSongId = null;
-		if (app.srcSongId === song.id) app.srcSongId = null;
+		app.srcSongIds = app.srcSongIds.filter((id) => id !== song.id);
 		await deleteSong(song.id);
 		const idx = app.songs.findIndex((s) => s.id === song.id);
 		if (idx >= 0) app.songs.splice(idx, 1);
@@ -267,7 +297,7 @@
 		for (const s of victims) {
 			if (s.id == null) continue;
 			if (app.refSongId === s.id) app.refSongId = null;
-			if (app.srcSongId === s.id) app.srcSongId = null;
+			app.srcSongIds = app.srcSongIds.filter((id) => id !== s.id);
 			await deleteSong(s.id);
 		}
 		app.songs = app.songs.filter((s) => s.favorite);
@@ -410,7 +440,7 @@
 		bind:playing
 		bind:time
 		bind:dur
-		selectable={isSrc}
+		selectable={isSrc && app.srcSongIds.length === 1}
 		bind:rangeStart
 		bind:rangeEnd
 	/>
@@ -425,7 +455,32 @@
 			{#if song.analysisState === 'error'}
 				<p>{song.analysisError || 'Analyzer unavailable'}</p>
 			{:else if hasStyleProfile}
-				<p>{song.stylePrompt || song.request.caption}</p>
+				{#if editingStyle}
+					<textarea
+						class="style-editor"
+						rows="4"
+						bind:value={styleDraft}
+						title="Edit the reusable style description"
+					></textarea>
+					<div class="style-editor-actions">
+						<button class="small-action primary" type="button" onclick={saveStyle}
+							>Save style</button
+						>
+						<button class="small-action" type="button" onclick={() => (editingStyle = false)}>
+							Cancel
+						</button>
+					</div>
+				{:else}
+					<p>{song.stylePrompt || song.request.caption}</p>
+					<button
+						class="style-edit-button"
+						type="button"
+						onclick={editStyle}
+						title="Edit this discovered style description"
+					>
+						<Pencil size={12} /> Edit style description
+					</button>
+				{/if}
 				<div class="profile-metadata">
 					<span><b>{song.request.bpm || '—'}</b> BPM</span>
 					<span
@@ -668,6 +723,39 @@
 		color: var(--fg);
 		font-size: 0.78rem;
 		line-height: 1.5;
+	}
+	.style-editor {
+		width: 100%;
+		min-height: 5.5rem;
+		padding: 0.55rem;
+		border: 1px solid var(--accent);
+		border-radius: 0.35rem;
+		background: var(--surface);
+		color: var(--fg);
+		font: 0.78rem/1.5 var(--sans);
+		resize: vertical;
+	}
+	.style-editor-actions {
+		display: flex;
+		gap: 0.4rem;
+		margin-top: 0.45rem;
+	}
+	.style-edit-button {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		margin-top: 0.45rem;
+		padding: 0.25rem 0.4rem;
+		border: 1px solid var(--line);
+		border-radius: 0.25rem;
+		background: transparent;
+		color: var(--muted);
+		font: 0.58rem var(--mono);
+		cursor: pointer;
+	}
+	.style-edit-button:hover {
+		border-color: var(--accent);
+		color: var(--accent);
 	}
 	.style-profile .profile-empty {
 		color: var(--muted);

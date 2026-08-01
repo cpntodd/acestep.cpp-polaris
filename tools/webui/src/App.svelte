@@ -78,7 +78,21 @@
 
 	function pollProps() {
 		props()
-			.then((h) => (app.props = h))
+			.then((h) => {
+				app.props = h;
+				// Model routing is intentionally automatic in the friendly UI. Keep
+				// saved templates compatible by selecting the first packaged model
+				// whenever an old or empty setting is encountered.
+				if (!h.models.lm.includes(String(app.request.lm_model))) {
+					app.request.lm_model = h.models.lm[0] || h.default.lm_model;
+				}
+				if (!h.models.dit.includes(String(app.request.synth_model))) {
+					app.request.synth_model = h.models.dit[0] || h.default.synth_model;
+				}
+				if (!h.models.vae.includes(String(app.request.vae))) {
+					app.request.vae = h.models.vae[0] || h.default.vae;
+				}
+			})
 			.catch(() => (app.props = null));
 	}
 

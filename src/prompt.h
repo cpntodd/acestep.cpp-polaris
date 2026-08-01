@@ -33,10 +33,12 @@ struct AcePrompt {
 
 // Macedonian shares the Cyrillic script with Serbian and Bulgarian, but its
 // letters ѓ, ќ, and ѕ are distinctive. A few orthographic words are also
-// useful high-confidence markers (ќе, што, зошто, каде, сакам): Serbian and
-// Bulgarian use different forms for these. The language model may still emit
-// sr or bg for a Macedonian recording, so use only these conservative signals
-// after lyrics have been recovered.
+// useful high-confidence markers (ќе, зошто, каде, сакам, можам): Serbian and
+// Bulgarian use different standard forms for these. The model can also return
+// Latin transliteration, so the correction below recognizes a small set of
+// Macedonian-only Latin forms as well. These are deliberately conservative,
+// but high-confidence lyric evidence may correct any language label emitted by
+// the listener.
 static bool text_has_macedonian_script(const std::string & text) {
     static const char * const markers[] = {
         "\xD1\x93", // ѓ
@@ -54,30 +56,184 @@ static bool text_has_macedonian_script(const std::string & text) {
     return false;
 }
 
+static bool text_marker_boundary(const std::string & text, size_t pos, size_t len) {
+    auto is_word_byte = [](unsigned char c) {
+        // Treat UTF-8 continuation/leading bytes as word characters too, so a
+        // Cyrillic marker cannot match halfway through another word.
+        return c >= 0x80 || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+               (c >= '0' && c <= '9') || c == '_';
+    };
+    const bool left_word  = pos > 0 && is_word_byte((unsigned char) text[pos - 1]);
+    const size_t end      = pos + len;
+    const bool right_word = end < text.size() && is_word_byte((unsigned char) text[end]);
+    return !left_word && !right_word;
+}
+
 static bool text_has_macedonian_word(const std::string & text) {
     static const char * const markers[] = {
-        "\xD1\x9C\xD0\xB5",                         // ќе
-        "\xD1\x88\xD1\x82\xD0\xBE",             // што
-        "\xD0\xB7\xD0\xBE\xD1\x88\xD1\x82\xD0\xBE", // зошто
-        "\xD0\xBA\xD0\xB0\xD0\xB4\xD0\xB5",   // каде
-        "\xD1\x81\xD0\xB0\xD0\xBA\xD0\xB0\xD0\xBC", // сакам
-        "\xD0\x9A\xD0\xB0\xD0\xB4\xD0\xB5", // Каде
+        "\xD1\x9C\xD0\xB5",                                 // ќе
+        "\xD0\x8C\xD0\xB5",                                 // Ќе
+        "\xD1\x88\xD1\x82\xD0\xBE",                         // што
+        "\xD0\xA8\xD1\x82\xD0\xBE",                         // Што
+        "\xD0\xB7\xD0\xBE\xD1\x88\xD1\x82\xD0\xBE",       // зошто
+        "\xD0\x97\xD0\xBE\xD1\x88\xD1\x82\xD0\xBE",       // Зошто
+        "\xD0\xBA\xD0\xB0\xD0\xB4\xD0\xB5",                 // каде
+        "\xD0\x9A\xD0\xB0\xD0\xB4\xD0\xB5",                 // Каде
+        "\xD1\x81\xD0\xB0\xD0\xBA\xD0\xB0\xD0\xBC",       // сакам
+        "\xD0\xA1\xD0\xB0\xD0\xBA\xD0\xB0\xD0\xBC",       // Сакам
+        "\xD0\xBC\xD0\xBE\xD0\xB6\xD0\xB0\xD0\xBC",       // можам
+        "\xD0\x9C\xD0\xBE\xD0\xB6\xD0\xB0\xD0\xBC",       // Можам
+        "\xD1\x82\xD0\xB5 \xD1\x81\xD0\xB0\xD0\xBA\xD0\xB0\xD0\xBC", // те сакам
+        "\xD0\xA2\xD0\xB5 \xD1\x81\xD0\xB0\xD0\xBA\xD0\xB0\xD0\xBC", // Те сакам
     };
     for (const char * marker : markers) {
-        if (text.find(marker) != std::string::npos) {
-            return true;
+        size_t pos = 0;
+        const size_t len = strlen(marker);
+        while ((pos = text.find(marker, pos)) != std::string::npos) {
+            if (text_marker_boundary(text, pos, len)) {
+                return true;
+            }
+            pos += len;
         }
     }
     return false;
 }
 
-static void normalize_detected_language(const std::string & cot, const std::string & lyrics, AcePrompt * out) {
-    if (out->vocal_language != "" && out->vocal_language != "sr" && out->vocal_language != "bg") {
+static bool text_has_macedonian_latin(const std::string & text) {
+    static const char * const markers[] = {
+        "sakam",     // сакам
+        "zosto",     // зошто
+        "zoshto",    // alternative sh transliteration
+        "što",       // што
+        "kade",      // каде
+        "mozam",     // можам
+        "te sakam",  // те сакам
+        "jas sum",   // јас сум
+        "kaj",       // кај
+        "ke",        // ќе (used in standard Latin transliteration)
+    };
+    for (const char * marker : markers) {
+        size_t pos = 0;
+        const size_t len = strlen(marker);
+        while ((pos = text.find(marker, pos)) != std::string::npos) {
+            if (text_marker_boundary(text, pos, len)) {
+                // The two-letter transliteration is too common on its own;
+                // require a second Macedonian marker before accepting it.
+                if (len > 2 || text.find("sakam") != std::string::npos ||
+                    text.find("zosto") != std::string::npos || text.find("kade") != std::string::npos) {
+                    return true;
+                }
+            }
+            pos += len;
+        }
+    }
+    return false;
+}
+
+static void replace_ascii_insensitive(std::string & text, const char * needle, const char * replacement) {
+    const size_t needle_len = strlen(needle);
+    const size_t repl_len   = strlen(replacement);
+    if (needle_len == 0) {
         return;
     }
-    if (text_has_macedonian_script(cot) || text_has_macedonian_script(lyrics) ||
-        text_has_macedonian_word(cot) || text_has_macedonian_word(lyrics)) {
+    for (size_t pos = 0; pos + needle_len <= text.size();) {
+        bool match = true;
+        for (size_t i = 0; i < needle_len; i++) {
+            char a = text[pos + i];
+            char b = needle[i];
+            if (a >= 'A' && a <= 'Z') {
+                a = (char) (a - 'A' + 'a');
+            }
+            if (b >= 'A' && b <= 'Z') {
+                b = (char) (b - 'A' + 'a');
+            }
+            if (a != b) {
+                match = false;
+                break;
+            }
+        }
+        if (match) {
+            text.replace(pos, needle_len, replacement);
+            pos += repl_len;
+        } else {
+            pos++;
+        }
+    }
+}
+
+static bool caption_mentions_macedonian(const std::string & caption) {
+    const std::string lower = [&]() {
+        std::string value = caption;
+        for (char & ch : value) {
+            if (ch >= 'A' && ch <= 'Z') {
+                ch = (char) (ch - 'A' + 'a');
+            }
+        }
+        return value;
+    }();
+    return lower.find("macedonian") != std::string::npos || lower.find("македон") != std::string::npos;
+}
+
+// The understand model sometimes describes a Macedonian-language recording as
+// Turkish, Indian, or generic Eastern European folk because it recognizes
+// shared Balkan instrumentation. Once the language evidence is high
+// confidence, keep the musical texture but make the regional identity explicit
+// in the reusable style prompt.
+static void normalize_macedonian_caption(AcePrompt * out) {
+    if (out->vocal_language != "mk") {
+        return;
+    }
+    replace_ascii_insensitive(out->caption, "Eastern European or Turkish folk", "Macedonian/Balkan folk");
+    replace_ascii_insensitive(out->caption, "Eastern European/Turkish folk", "Macedonian/Balkan folk");
+    replace_ascii_insensitive(out->caption, "Balkan or Turkish folk", "Macedonian/Balkan folk");
+    replace_ascii_insensitive(out->caption, "Turkish-style folk", "Macedonian/Balkan folk");
+    replace_ascii_insensitive(out->caption, "Turkish folk", "Macedonian/Balkan folk");
+    replace_ascii_insensitive(out->caption, "Indian folk", "Macedonian/Balkan folk");
+    replace_ascii_insensitive(out->caption, "Indian classical", "Macedonian/Balkan folk");
+    replace_ascii_insensitive(out->caption, "Indian-inspired", "Macedonian/Balkan-inspired");
+    replace_ascii_insensitive(out->caption, "Eastern European", "Macedonian/Balkan");
+    replace_ascii_insensitive(out->caption, "Turkish", "Macedonian/Balkan");
+    replace_ascii_insensitive(out->caption, "Indian", "Macedonian/Balkan");
+    if (out->caption.empty()) {
+        out->caption = "Macedonian-language Balkan folk music";
+    } else if (!caption_mentions_macedonian(out->caption)) {
+        out->caption = "Macedonian-language " + out->caption;
+    }
+}
+
+static std::string canonicalize_language_hint(std::string language) {
+    while (!language.empty() && (language.front() == ' ' || language.front() == '\t' || language.front() == '\'' ||
+                                 language.front() == '"')) {
+        language.erase(language.begin());
+    }
+    while (!language.empty() && (language.back() == ' ' || language.back() == '\t' || language.back() == '\'' ||
+                                 language.back() == '"' || language.back() == '\r')) {
+        language.pop_back();
+    }
+    for (char & ch : language) {
+        if (ch >= 'A' && ch <= 'Z') {
+            ch = (char) (ch - 'A' + 'a');
+        }
+    }
+    if (language == "macedonian" || language == "macedonian (mk)" || language == "mkd" ||
+        language == "mac") {
+        return "mk";
+    }
+    return language;
+}
+
+static void normalize_detected_language(const std::string & cot, const std::string & lyrics, AcePrompt * out) {
+    const bool macedonian_evidence =
+        text_has_macedonian_script(cot) || text_has_macedonian_script(lyrics) || text_has_macedonian_word(cot) ||
+        text_has_macedonian_word(lyrics) || text_has_macedonian_latin(cot) || text_has_macedonian_latin(lyrics);
+    if (macedonian_evidence) {
         out->vocal_language = "mk";
+        normalize_macedonian_caption(out);
+        return;
+    }
+    out->vocal_language = canonicalize_language_hint(out->vocal_language);
+    if (out->vocal_language == "mk") {
+        normalize_macedonian_caption(out);
     }
 }
 
@@ -214,9 +370,10 @@ static bool parse_cot_and_lyrics(const std::string & text, AcePrompt * out) {
         }
     }
 
-    // Correct the common sr/bg confusion only when the generated text
-    // contains a Macedonian-specific Cyrillic character.
-    normalize_detected_language(cot, out->lyrics, out);
+    // Correct regional-language confusion from both the model's metadata and
+    // the recovered lyrics/caption. This also handles Turkish/Indian labels
+    // produced when Macedonian instrumentation is misread.
+    normalize_detected_language(text, out->lyrics, out);
 
     return (out->bpm > 0 || out->duration > 0);
 }

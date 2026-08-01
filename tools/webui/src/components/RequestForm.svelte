@@ -17,6 +17,7 @@
 		cancelJob
 	} from '../lib/api.js';
 	import { putSong, getAllSongs, saveJob, loadJob, loadJobId, clearJob } from '../lib/db.js';
+	import { mixAudioBlobs } from '../lib/audio.js';
 	import {
 		TASK_TEXT2MUSIC,
 		TASK_COVER,
@@ -49,17 +50,12 @@
 	let busyLm = $state(false);
 	let busySynth = $state(false);
 	let busy = $derived(busyLm || busySynth);
+	let synthVersionCount = $derived(Math.max(1, Number(app.request.synth_batch_size) || 1));
 	let fileInput: HTMLInputElement;
 	let saveFormatOpen = $state(false);
 
 	let d = $derived(app.props?.default);
-	let ditModels = $derived(app.props?.models.dit ?? []);
-	let lmModels = $derived(app.props?.models.lm ?? []);
 	let adapterList = $derived(app.props?.adapters ?? []);
-	let adapterStale = $derived(
-		!!app.request.adapter && !adapterList.includes(String(app.request.adapter))
-	);
-	let vaeList = $derived(app.props?.models.vae ?? []);
 	let taskType = $derived(app.request.task_type || d?.task_type || '');
 	let dp = $derived(
 		app.props?.presets
@@ -74,8 +70,8 @@
 	let singleTrack = $derived(taskType === TASK_LEGO || taskType === TASK_EXTRACT);
 
 	// DiT input indicators
-	let hasCodes = $derived(!!app.request.audio_codes?.trim() && app.srcSongId == null);
-	let hasSrc = $derived(app.srcSongId != null);
+	let hasCodes = $derived(!!app.request.audio_codes?.trim() && app.srcSongIds.length === 0);
+	let hasSrc = $derived(app.srcSongIds.length > 0);
 	let hasRange = $derived(app.srcRangeStart != null || app.srcRangeEnd != null);
 	let hasRef = $derived(app.refSongId != null);
 
@@ -465,9 +461,25 @@
 				}
 			}
 
-			// find source audio (cover/lego/repaint) and reference audio (timbre)
-			const srcSong = app.srcSongId != null ? app.songs.find((s) => s.id === app.srcSongId) : null;
+			// Find source audio (cover/lego/repaint) and reference audio (timbre).
+			// Multiple source cards are mixed locally into one musical context so
+			// melody, riffs, harmony, and rhythm can all influence the new take.
+			const srcSongs = app.srcSongIds
+				.map((id) => app.songs.find((song) => song.id === id))
+				.filter((song): song is Song => song != null);
+			const srcSong = srcSongs[0] ?? null;
 			const refSong = app.refSongId != null ? app.songs.find((s) => s.id === app.refSongId) : null;
+			let sourceAudio: Blob | null = null;
+			let sourceLatents: Blob | null = null;
+			if (srcSongs.length === 1 && srcSong?.latents) {
+				sourceLatents = srcSong.latents;
+			} else if (srcSongs.length > 0) {
+				sourceAudio = await mixAudioBlobs(srcSongs.map((song) => song.audio));
+			}
+			const useSourcesAsTimbre =
+				srcSongs.length > 0 && toSend[0]?.task_type === TASK_TEXT2MUSIC && refSong == null;
+			const refAudio = refSong?.latents ? null : (refSong?.audio ?? null);
+			const refLatents = refSong?.latents ?? null;
 
 			// extract DiT variant from model filename
 			// "acestep-v15-xl-turbo-Q8_0.gguf" -> "xl-turbo"
@@ -481,13 +493,13 @@
 			// those instead of the audio: the server skips the matching VAE
 			// encode entirely.
 			const jobId =
-				srcSong || refSong
+				srcSongs.length > 0 || refSong
 					? await synthSubmitWithAudio(
 							toSend,
-							srcSong?.latents ? null : (srcSong?.audio ?? null),
-							srcSong?.latents ?? null,
-							refSong?.latents ? null : (refSong?.audio ?? null),
-							refSong?.latents ?? null,
+							useSourcesAsTimbre ? null : sourceAudio,
+							useSourcesAsTimbre ? null : sourceLatents,
+							useSourcesAsTimbre ? sourceAudio : refAudio,
+							useSourcesAsTimbre ? sourceLatents : refLatents,
 							app.format
 						)
 					: await synthSubmit(toSend, app.format);
@@ -584,84 +596,6 @@
 			><RotateCcw size={14} /> Clear</button
 		>
 	</div>
-
-	<details>
-		<summary title="Choose which local music tools should handle words and sound"
-			>Music tools</summary
-		>
-		<div class="details-body">
-			<div class="model-row">
-				<span
-					class="model-label"
-					title="Reads your description and can help create lyrics and song details"
-					>Words & ideas</span
-				>
-				<select
-					class="model-select"
-					bind:value={app.request.lm_model}
-					title="The local tool that reads your description and helps create lyrics and song details"
-				>
-					{#each lmModels as name}
-						<option value={name}>{name}</option>
-					{/each}
-				</select>
-			</div>
-			<div class="model-row">
-				<span class="model-label" title="Turns the song plan into the actual sound"
-					>Sound maker</span
-				>
-				<select
-					class="model-select"
-					bind:value={app.request.synth_model}
-					title="The local tool that turns the song plan into music"
-				>
-					{#each ditModels as name}
-						<option value={name}>{name}</option>
-					{/each}
-				</select>
-			</div>
-			<div class="model-row">
-				<span class="model-label" title="An optional style add-on that changes the sound"
-					>Style add-on</span
-				>
-				<select
-					class="model-select"
-					bind:value={app.request.adapter}
-					title="Optional extra style training. Leave disabled unless you added a matching style add-on."
-				>
-					<option value="">Disabled</option>
-					{#if adapterStale}
-						<option value={app.request.adapter} disabled>{app.request.adapter}</option>
-					{/if}
-					{#each adapterList as name}
-						<option value={name}>{name}</option>
-					{/each}
-				</select>
-				<input
-					type="text"
-					class="batch-input"
-					placeholder="1.0"
-					bind:value={app.request.adapter_scale}
-					title="How strongly the optional style add-on changes the result. Start at 1.0."
-				/>
-			</div>
-			<div class="model-row">
-				<span
-					class="model-label"
-					title="Converts audio to and from the internal sound representation">Audio decoder</span
-				>
-				<select
-					class="model-select"
-					bind:value={app.request.vae}
-					title="The local tool that converts audio to and from the format used while making music"
-				>
-					{#each vaeList as name}
-						<option value={name}>{name}</option>
-					{/each}
-				</select>
-			</div>
-		</div>
-	</details>
 
 	<div class="section-title" title="A name for the song in your local library">Song name</div>
 	<input type="text" bind:value={app.name} placeholder="Give your song a name" />
@@ -1163,8 +1097,11 @@
 			<span class="dit-ind" class:on={hasCodes} title="A prepared song plan is being used"
 				>Song plan</span
 			>
-			<span class="dit-ind" class:on={hasSrc} title="A source recording is being used"
-				>Source song</span
+			<span
+				class="dit-ind"
+				class:on={hasSrc}
+				title="Selected source songs are mixed locally so their melody, riffs, harmony, and rhythm can guide the new song"
+				>{hasSrc ? `Source mix (${app.srcSongIds.length})` : 'Source song'}</span
 			>
 			<span
 				class="dit-ind"
@@ -1185,13 +1122,17 @@
 			disabled={busy}
 			onclick={synthesize}
 			title="Create the audio using your description, song plan, and any selected reference"
-			>Create music</button
+			>{busySynth
+				? 'Creating music…'
+				: synthVersionCount > 1
+					? `Create ${synthVersionCount} versions`
+					: 'Create music'}</button
 		>
 		<button
 			type="button"
 			disabled={!busySynth}
 			onclick={cancelPipeline}
-			title="Stop creating this song">Cancel</button
+			title="Stop the active music job">{busySynth ? 'Stop creating' : 'Stop'}</button
 		>
 	</div>
 </form>

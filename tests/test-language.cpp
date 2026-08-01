@@ -73,6 +73,58 @@ int main() {
         return fail("Explicit mk language was not preserved");
     }
 
+    AcePrompt latin_macedonian = {};
+    const std::string latin_text =
+        "<think>\n"
+        "bpm: 96\n"
+        "duration: 30\n"
+        "language: unknown\n"
+        "</think>\n"
+        "# Lyric\n"
+        "Te sakam, zosto kade si?\n";
+    if (!parse_cot_and_lyrics(latin_text, &latin_macedonian)) {
+        return fail("Latin Macedonian fixture did not parse");
+    }
+    if (latin_macedonian.vocal_language != "mk") {
+        return fail("Latin Macedonian markers were not normalized to mk");
+    }
+
+    AcePrompt misclassified_macedonian = {};
+    const std::string misclassified_text =
+        "<think>\n"
+        "bpm: 96\n"
+        "duration: 30\n"
+        "language: tr\n"
+        "caption: Turkish folk song with Indian influences\n"
+        "</think>\n"
+        "# Lyric\n"
+        "Ќе те сакам, каде си?\n";
+    if (!parse_cot_and_lyrics(misclassified_text, &misclassified_macedonian)) {
+        return fail("Misclassified Macedonian fixture did not parse");
+    }
+    if (misclassified_macedonian.vocal_language != "mk") {
+        return fail("Macedonian evidence did not override Turkish language");
+    }
+    if (misclassified_macedonian.caption.find("Macedonian") == std::string::npos ||
+        misclassified_macedonian.caption.find("Turkish") != std::string::npos ||
+        misclassified_macedonian.caption.find("Indian") != std::string::npos) {
+        return fail("Macedonian style caption was not corrected");
+    }
+
+    AcePrompt named_macedonian = {};
+    const std::string named_text =
+        "<think>\n"
+        "bpm: 96\n"
+        "duration: 30\n"
+        "language: Macedonian\n"
+        "</think>\n";
+    if (!parse_cot_and_lyrics(named_text, &named_macedonian)) {
+        return fail("Named Macedonian fixture did not parse");
+    }
+    if (named_macedonian.vocal_language != "mk") {
+        return fail("Named Macedonian language was not canonicalized to mk");
+    }
+
     fprintf(stderr, "[Test] PASS\n");
     return 0;
 }
