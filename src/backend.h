@@ -26,8 +26,19 @@ static int         g_backend_refs  = 0;
 // Used for GGML CPU thread count: GEMM shares SIMD units across hyperthreads,
 // so one thread per physical core is optimal.
 static int backend_cpu_n_threads(void) {
-    int n = (int) std::thread::hardware_concurrency() / 2;
-    return n > 0 ? n : 1;
+	// GEMM usually benefits from one worker per physical core. Keep that as
+	// the safe default, but allow a desktop package user to tune the count for
+	// a particular CPU without rebuilding (for example, 6 on a Ryzen 5 2600).
+	const char * configured = std::getenv("ACESTEP_CPU_THREADS");
+	if (configured && configured[0] != '\0') {
+		char * end = nullptr;
+		long   n   = std::strtol(configured, &end, 10);
+		if (end != configured && *end == '\0' && n > 0 && n <= 256) {
+			return (int) n;
+		}
+	}
+	int n = (int) std::thread::hardware_concurrency() / 2;
+	return n > 0 ? n : 1;
 }
 
 // Standalone CPU backend via Registry API (DL-safe, no ggml-cpu.h needed).

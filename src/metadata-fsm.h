@@ -198,12 +198,14 @@ struct MetadataFSM {
             }
             build_value_tree(bpe, keyscale_tree, "keyscale:", vals);
         }
-        // Language: 51 codes matching Python constants.py VALID_LANGUAGES
+        // Language: ISO 639-1 codes supported by the ACE-Step metadata format.
+        // Keep Macedonian (mk) explicit: without it the constrained decoder
+        // can only fall back to nearby South Slavic choices such as sr/bg.
         {
             std::vector<std::string> vals = {
                 "ar", "az", "bg", "bn", "ca", "cs", "da", "de", "el", "en",  "es", "fa",      "fi",
                 "fr", "he", "hi", "hr", "ht", "hu", "id", "is", "it", "ja",  "ko", "la",      "lt",
-                "ms", "ne", "nl", "no", "pa", "pl", "pt", "ro", "ru", "sa",  "sk", "sr",      "sv",
+                "mk", "ms", "ne", "nl", "no", "pa", "pl", "pt", "ro", "ru", "sa",  "sk", "sr",      "sv",
                 "sw", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi", "yue", "zh", "unknown",
             };
             build_value_tree(bpe, language_tree, "language:", vals);

@@ -1,4 +1,8 @@
 build/
+dist/
+.deb-stage.*
+.deb-work.*
+.deb-test.*
 *.wav
 *.bf16
 

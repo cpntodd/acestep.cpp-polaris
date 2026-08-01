@@ -31,6 +31,56 @@ struct AcePrompt {
     std::string vocal_language;
 };
 
+// Macedonian shares the Cyrillic script with Serbian and Bulgarian, but its
+// letters ѓ, ќ, and ѕ are distinctive. A few orthographic words are also
+// useful high-confidence markers (ќе, што, зошто, каде, сакам): Serbian and
+// Bulgarian use different forms for these. The language model may still emit
+// sr or bg for a Macedonian recording, so use only these conservative signals
+// after lyrics have been recovered.
+static bool text_has_macedonian_script(const std::string & text) {
+    static const char * const markers[] = {
+        "\xD1\x93", // ѓ
+        "\xD0\x83", // Ѓ
+        "\xD1\x9C", // ќ
+        "\xD0\x8C", // Ќ
+        "\xD1\x95", // ѕ
+        "\xD0\x85", // Ѕ
+    };
+    for (const char * marker : markers) {
+        if (text.find(marker) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool text_has_macedonian_word(const std::string & text) {
+    static const char * const markers[] = {
+        "\xD1\x9C\xD0\xB5",                         // ќе
+        "\xD1\x88\xD1\x82\xD0\xBE",             // што
+        "\xD0\xB7\xD0\xBE\xD1\x88\xD1\x82\xD0\xBE", // зошто
+        "\xD0\xBA\xD0\xB0\xD0\xB4\xD0\xB5",   // каде
+        "\xD1\x81\xD0\xB0\xD0\xBA\xD0\xB0\xD0\xBC", // сакам
+        "\xD0\x9A\xD0\xB0\xD0\xB4\xD0\xB5", // Каде
+    };
+    for (const char * marker : markers) {
+        if (text.find(marker) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void normalize_detected_language(const std::string & cot, const std::string & lyrics, AcePrompt * out) {
+    if (out->vocal_language != "" && out->vocal_language != "sr" && out->vocal_language != "bg") {
+        return;
+    }
+    if (text_has_macedonian_script(cot) || text_has_macedonian_script(lyrics) ||
+        text_has_macedonian_word(cot) || text_has_macedonian_word(lyrics)) {
+        out->vocal_language = "mk";
+    }
+}
+
 // CoT parsing (extract metadata + lyrics from LLM Phase1 output)
 static bool parse_cot_and_lyrics(const std::string & text, AcePrompt * out) {
     // Extract CoT content between <think>...</think>
@@ -163,6 +213,10 @@ static bool parse_cot_and_lyrics(const std::string & text, AcePrompt * out) {
             out->lyrics = lyrics_after;
         }
     }
+
+    // Correct the common sr/bg confusion only when the generated text
+    // contains a Macedonian-specific Cyrillic character.
+    normalize_detected_language(cot, out->lyrics, out);
 
     return (out->bpm > 0 || out->duration > 0);
 }

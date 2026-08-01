@@ -560,7 +560,8 @@ Time signature numerator as a string, e.g. `"4"` for 4/4, `"3"` for 3/4.
 LLM fills if empty.
 
 **`vocal_language`** (string, default `""` = unset)
-BCP-47 language code for lyrics, e.g. `"en"`, `"fr"`, `"ja"`. Three states:
+BCP-47 language code for lyrics, e.g. `"en"`, `"fr"`, `"ja"`, or Macedonian
+`"mk"`. Three states:
 - `""`: LLM detects the language via CoT and fills this field.
 - `"unknown"`: explicit "no specific language" signal to the DiT.
 - Any language code: used as-is. When lyrics are being generated, the FSM

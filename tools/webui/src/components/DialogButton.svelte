@@ -15,14 +15,16 @@
 <style>
 	button {
 		background: var(--bg-btn);
-		border: none;
+		border: 1px solid var(--line);
 		cursor: pointer;
-		padding: 0.2rem 0.6rem;
+		padding: 0.38rem 0.7rem;
 		color: var(--fg);
 		font-size: 0.8rem;
-		border-radius: 3px;
+		border-radius: 0.35rem;
 	}
 	button:hover {
 		background: var(--bg-btn-hover);
+		border-color: var(--accent);
+		color: var(--accent);
 	}
 </style>

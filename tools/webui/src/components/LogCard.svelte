@@ -50,8 +50,8 @@
 	.card {
 		display: flex;
 		flex-direction: column;
-		border: none;
-		border-radius: 4px;
+		border: 1px solid var(--line);
+		border-radius: 0.5rem;
 		background: var(--bg-card);
 		overflow: hidden;
 	}
@@ -60,7 +60,7 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.3rem 0.5rem;
-		background: var(--bg-input);
+		background: var(--surface-soft);
 		border: none;
 		cursor: pointer;
 		color: var(--fg);
@@ -68,7 +68,7 @@
 		text-align: left;
 	}
 	.card-header:hover {
-		background: var(--bg-btn-hover);
+		background: rgba(240, 144, 64, 0.1);
 	}
 	.card-label {
 		font-weight: 600;

@@ -72,16 +72,18 @@
 	.dialog-overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
+		background: rgba(8, 8, 8, 0.72);
+		backdrop-filter: blur(8px);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		z-index: 100;
 	}
 	.dialog {
-		background: var(--bg-card);
-		border-radius: 4px;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+		background: var(--surface-raised);
+		border: 1px solid var(--line-strong);
+		border-radius: 0.65rem;
+		box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
 		padding: 0.75rem;
 		min-width: 16rem;
 		display: flex;

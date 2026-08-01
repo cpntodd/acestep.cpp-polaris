@@ -15,3 +15,11 @@ link_ggml_backends(test-model-store)
 add_executable(test-lm-prompt test-lm-prompt.cpp)
 target_link_libraries(test-lm-prompt PRIVATE acestep-core)
 link_ggml_backends(test-lm-prompt)
+
+# test-language: parser-level regression checks for Macedonian detection.
+add_executable(test-language test-language.cpp)
+target_include_directories(test-language PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/ggml/include
+)

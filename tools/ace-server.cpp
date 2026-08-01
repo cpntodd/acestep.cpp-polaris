@@ -36,6 +36,7 @@
 #include "pipeline-understand.h"
 #include "request.h"
 #include "synth-batch-runner.h"
+#include "system-metrics.h"
 #include "task-types.h"
 #include "vae.h"
 #include "version.h"
@@ -55,6 +56,7 @@
 #endif
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <csignal>
 #include <cstdio>
@@ -1563,6 +1565,42 @@ static void handle_props(const httplib::Request &, httplib::Response & res) {
     free(json);
 }
 
+// GET /metrics
+// Local host telemetry for the WebUI. GPU utilization is backend/platform
+// dependent, so the response keeps explicit availability flags for every
+// reading instead of conflating an unsupported probe with zero load.
+static void handle_metrics(const httplib::Request &, httplib::Response & res) {
+    const AceSystemMetrics metrics = system_metrics_sample();
+    yyjson_mut_doc *        doc = yyjson_mut_doc_new(NULL);
+    yyjson_mut_val *        root = yyjson_mut_obj(doc);
+    yyjson_mut_doc_set_root(doc, root);
+
+    yyjson_mut_val * cpu = yyjson_mut_obj(doc);
+    yyjson_mut_obj_add_bool(doc, cpu, "available", metrics.cpu_available);
+    yyjson_mut_obj_add_real(doc, cpu, "usage", metrics.cpu_usage);
+    yyjson_mut_obj_add_uint(doc, cpu, "cores", metrics.cpu_cores);
+    yyjson_mut_obj_add_val(doc, root, "cpu", cpu);
+
+    yyjson_mut_val * gpu = yyjson_mut_obj(doc);
+    yyjson_mut_obj_add_bool(doc, gpu, "available", metrics.gpu_available);
+    yyjson_mut_obj_add_bool(doc, gpu, "usage_available", metrics.gpu_usage_available);
+    yyjson_mut_obj_add_real(doc, gpu, "usage", metrics.gpu_usage);
+    yyjson_mut_obj_add_str(doc, gpu, "name", metrics.gpu_name.c_str());
+    yyjson_mut_obj_add_str(doc, gpu, "backend", metrics.gpu_backend.c_str());
+    yyjson_mut_obj_add_val(doc, root, "gpu", gpu);
+
+    yyjson_mut_val * vram = yyjson_mut_obj(doc);
+    yyjson_mut_obj_add_bool(doc, vram, "available", metrics.vram_available);
+    yyjson_mut_obj_add_uint(doc, vram, "used", metrics.vram_used);
+    yyjson_mut_obj_add_uint(doc, vram, "total", metrics.vram_total);
+    yyjson_mut_obj_add_val(doc, root, "vram", vram);
+
+    char * json = yyjson_mut_write(doc, YYJSON_WRITE_FP_TO_FIXED(2), NULL);
+    yyjson_mut_doc_free(doc);
+    res.set_content(json, "application/json");
+    free(json);
+}
+
 static void usage(const char * prog) {
     AceLmParams    lm_d;
     AceSynthParams synth_d;
@@ -1767,7 +1805,25 @@ int main(int argc, char ** argv) {
     svr.Get("/health", [](const httplib::Request &, httplib::Response & res) {
         res.set_content("{\"status\":\"ok\"}", "application/json");
     });
+    // POST /shutdown: local emergency stop for the WebUI fallback switch.
+    // The packaged launcher normally stops the child through the supervisor,
+    // but this endpoint keeps a directly launched ace-server recoverable too.
+    svr.Post("/shutdown", [](const httplib::Request & req, httplib::Response & res) {
+        const bool local = req.remote_addr == "127.0.0.1" || req.remote_addr == "::1" || req.remote_addr == "localhost";
+        if (!local) {
+            json_error(res, 403, "Shutdown is only available from localhost");
+            return;
+        }
+        res.set_content("{\"status\":\"stopping\"}", "application/json");
+        std::thread([] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            if (g_svr) {
+                g_svr->stop();
+            }
+        }).detach();
+    });
     svr.Get("/props", handle_props);
+    svr.Get("/metrics", handle_metrics);
     svr.Get("/logs", handle_logs);
 
     // job system endpoints

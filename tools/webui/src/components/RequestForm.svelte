@@ -187,7 +187,8 @@
 							duration: t.duration,
 							request: t.request,
 							audio: audios[i],
-							latents: latents[i]
+							latents: latents[i],
+							source: 'generated'
 						};
 						await putSong(song);
 					}
@@ -299,7 +300,9 @@
 			seed: 0,
 			duration: 0,
 			request: { caption: '' },
-			audio: blob
+			audio: blob,
+			source: 'upload',
+			analysisState: 'unscanned'
 		};
 		song.id = await putSong(song);
 		app.songs.unshift(song);
@@ -338,7 +341,9 @@
 				duration: 0,
 				request: { caption: '' },
 				audio: audios[0],
-				latents: latentsBlob
+				latents: latentsBlob,
+				source: 'upload',
+				analysisState: 'unscanned'
 			};
 			song.id = await putSong(song);
 			app.songs.unshift(song);
@@ -516,7 +521,8 @@
 					duration: r.duration || 0,
 					request: r,
 					audio: audios[i],
-					latents: latents[i]
+					latents: latents[i],
+					source: 'generated'
 				} as Song;
 				song.id = await putSong(song);
 				app.songs.unshift(song);
@@ -565,26 +571,35 @@
 		<button
 			type="button"
 			onclick={importJson}
-			title="Open JSON/YAML prompt, MP3, WAV or VAE latents"><FolderOpen size={14} /> Open</button
+			title="Open a saved song description, audio file, or saved audio data"
+			><FolderOpen size={14} /> Open</button
 		>
 		<button
 			type="button"
 			onclick={() => (saveFormatOpen = true)}
-			title="Save prompt as JSON or YAML"><Download size={14} /> Save</button
+			title="Save your song description so you can reuse it later"
+			><Download size={14} /> Save</button
 		>
-		<button type="button" onclick={reset} title="Reset prompt"><RotateCcw size={14} /> Reset</button
+		<button type="button" onclick={reset} title="Clear this form and start over"
+			><RotateCcw size={14} /> Clear</button
 		>
 	</div>
 
 	<details>
-		<summary>Models</summary>
+		<summary title="Choose which local music tools should handle words and sound"
+			>Music tools</summary
+		>
 		<div class="details-body">
 			<div class="model-row">
-				<span class="model-label">LM</span>
+				<span
+					class="model-label"
+					title="Reads your description and can help create lyrics and song details"
+					>Words & ideas</span
+				>
 				<select
 					class="model-select"
 					bind:value={app.request.lm_model}
-					title="Language Model for Inspire, Format and Compose. Scanned from --models directory at startup."
+					title="The local tool that reads your description and helps create lyrics and song details"
 				>
 					{#each lmModels as name}
 						<option value={name}>{name}</option>
@@ -592,11 +607,13 @@
 				</select>
 			</div>
 			<div class="model-row">
-				<span class="model-label">DiT</span>
+				<span class="model-label" title="Turns the song plan into the actual sound"
+					>Sound maker</span
+				>
 				<select
 					class="model-select"
 					bind:value={app.request.synth_model}
-					title="Diffusion Transformer for Synthesize. Scanned from --models directory at startup."
+					title="The local tool that turns the song plan into music"
 				>
 					{#each ditModels as name}
 						<option value={name}>{name}</option>
@@ -604,11 +621,13 @@
 				</select>
 			</div>
 			<div class="model-row">
-				<span class="model-label">LoRA</span>
+				<span class="model-label" title="An optional style add-on that changes the sound"
+					>Style add-on</span
+				>
 				<select
 					class="model-select"
 					bind:value={app.request.adapter}
-					title="Adapter merged into DiT at load time. Must match the exact DiT it was trained on. Scanned from --adapters directory. Supports LoRA as a ComfyUI single .safetensors or a PEFT directory with adapter_model.safetensors and adapter_config.json."
+					title="Optional extra style training. Leave disabled unless you added a matching style add-on."
 				>
 					<option value="">Disabled</option>
 					{#if adapterStale}
@@ -623,15 +642,18 @@
 					class="batch-input"
 					placeholder="1.0"
 					bind:value={app.request.adapter_scale}
-					title="Adapter scale factor. Lower if you hear structured noise or artifacts. Raise for stronger effect."
+					title="How strongly the optional style add-on changes the result. Start at 1.0."
 				/>
 			</div>
 			<div class="model-row">
-				<span class="model-label">VAE</span>
+				<span
+					class="model-label"
+					title="Converts audio to and from the internal sound representation">Audio decoder</span
+				>
 				<select
 					class="model-select"
 					bind:value={app.request.vae}
-					title="Variational Auto-Encoder for audio <-> latent conversion. Scanned from --models directory at startup."
+					title="The local tool that converts audio to and from the format used while making music"
 				>
 					{#each vaeList as name}
 						<option value={name}>{name}</option>
@@ -641,46 +663,46 @@
 		</div>
 	</details>
 
-	<div class="section-title">Name</div>
-	<input type="text" bind:value={app.name} placeholder="Untitled" />
+	<div class="section-title" title="A name for the song in your local library">Song name</div>
+	<input type="text" bind:value={app.name} placeholder="Give your song a name" />
 
 	<div class="section-title caption-header">
-		Caption
+		Describe your song
 		<label
 			class="header-toggle"
-			title="Lock caption: LM keeps your text intact (skips CoT caption refinement)"
+			title="Keep your words exactly as written instead of having the song helper expand them"
 		>
 			<input
 				type="checkbox"
 				checked={!app.request.use_cot_caption}
 				onchange={(e) => (app.request.use_cot_caption = !e.currentTarget.checked)}
-			/> Lock
+			/> Keep my words
 		</label>
 	</div>
 	<textarea
 		rows="8"
-		placeholder="Upbeat pop rock with driving guitars... (the only required field, enriched by the LM unless all prompt fields are filled.)"
+		placeholder="For example: warm 80s pop with bright guitars, a big chorus, and a hopeful night-drive feeling"
 		bind:value={app.request.caption}
 	></textarea>
 
 	<div class="section-title lyrics-header">
-		Lyrics
-		<label class="header-toggle" title="Set lyrics to [Instrumental] and language to unknown">
+		Lyrics (optional)
+		<label class="header-toggle" title="Make an instrumental song with no singing">
 			<input type="checkbox" checked={instrumental} onchange={toggleInstrumental} /> Instrumental
 		</label>
 	</div>
 	<textarea
 		rows="8"
-		placeholder="Write your own lyrics or leave empty to let the LM create them..."
+		placeholder="Write lyrics here, or leave this empty and let the song helper write them"
 		bind:value={app.request.lyrics}
 	></textarea>
 
-	<div class="section-title metadata-header">
-		Metadata
+	<div class="section-title metadata-header" title="Optional song details used to guide the result">
+		Song details (optional)
 		<button
 			type="button"
 			class="clear-btn"
-			title="Clear metadata"
+			title="Clear the song details"
 			onclick={clearMetadata}
 			aria-label="Clear metadata"
 		>
@@ -690,35 +712,54 @@
 	<div class="meta-grid">
 		<label
 			>Language <input
+				list="vocal-language-options"
 				type="text"
-				placeholder={ph(d?.vocal_language)}
+				title="The language of the singing. Macedonian is available as its own choice: mk."
+				placeholder={ph(d?.vocal_language) || 'e.g. Macedonian'}
 				bind:value={app.request.vocal_language}
 			/></label
 		>
-		<label>BPM <input type="text" placeholder={ph(d?.bpm)} bind:value={app.request.bpm} /></label>
+		<datalist id="vocal-language-options">
+			<option value="mk">Macedonian</option>
+			<option value="sr">Serbian</option>
+			<option value="bg">Bulgarian</option>
+			<option value="en">English</option>
+			<option value="de">German</option>
+			<option value="es">Spanish</option>
+			<option value="fr">French</option>
+			<option value="it">Italian</option>
+			<option value="ja">Japanese</option>
+			<option value="ko">Korean</option>
+			<option value="ru">Russian</option>
+			<option value="uk">Ukrainian</option>
+			<option value="zh">Chinese</option>
+		</datalist>
+		<label title="Approximate singing and beat speed"
+			>Tempo <input type="text" placeholder={ph(d?.bpm)} bind:value={app.request.bpm} /></label
+		>
 		<label
-			>Duration <input
+			>Length <input
 				type="text"
 				placeholder={ph(d?.duration)}
 				bind:value={app.request.duration}
 			/></label
 		>
 		<label
-			>Key <input
+			>Musical key <input
 				type="text"
 				placeholder={ph(d?.keyscale)}
 				bind:value={app.request.keyscale}
 			/></label
 		>
 		<label
-			>Time sig <input
+			>Beat pattern <input
 				type="text"
 				placeholder={ph(d?.timesignature)}
 				bind:value={app.request.timesignature}
 			/></label
 		>
 		<label
-			>LM seed <input
+			>Words seed <input
 				type="text"
 				placeholder={ph(d?.lm_seed)}
 				bind:value={app.request.lm_seed}
@@ -731,31 +772,29 @@
 			type="button"
 			disabled={busy}
 			onclick={dice}
-			title="Pick a random example from ACE-Step sample prompts. Use Inspire next to complete missing fields."
-			>Dice</button
+			title="Fill the form with a fun example so you can try the studio quickly">Surprise me</button
 		>
 		<button
 			type="button"
 			disabled={busy}
 			onclick={inspire}
-			title="Step 1: LM inference to generate metadata and lyrics from your caption. Next: Compose."
-			>Inspire</button
+			title="Use your description to fill in helpful song details and lyrics"
+			>Fill in details</button
 		>
 		<button
 			type="button"
 			disabled={busy}
 			onclick={format}
-			title="Step 1: LM inference to format existing lyrics for better generation quality. Next: Compose."
-			>Format</button
+			title="Tidy your lyrics into a shape that works well for singing">Polish lyrics</button
 		>
 	</div>
 
 	<details class="has-clear">
-		<summary>Advanced LM</summary>
+		<summary>More word and lyric controls</summary>
 		<button
 			type="button"
 			class="clear-btn details-clear"
-			title="Clear advanced LM"
+			title="Clear the extra word and lyric controls"
 			onclick={clearAdvancedLm}
 			aria-label="Clear advanced LM"
 		>
@@ -764,28 +803,28 @@
 		<div class="details-body">
 			<div class="meta-grid">
 				<label
-					>Temperature <input
+					>Creativity <input
 						type="text"
 						placeholder={ph(d?.lm_temperature)}
 						bind:value={app.request.lm_temperature}
 					/></label
 				>
 				<label
-					>CFG scale <input
+					>Instruction strength <input
 						type="text"
 						placeholder={ph(d?.lm_cfg_scale)}
 						bind:value={app.request.lm_cfg_scale}
 					/></label
 				>
 				<label
-					>Top P <input
+					>Word variety <input
 						type="text"
 						placeholder={ph(d?.lm_top_p)}
 						bind:value={app.request.lm_top_p}
 					/></label
 				>
 				<label
-					>Top K <input
+					>Word choices <input
 						type="text"
 						placeholder={ph(d?.lm_top_k)}
 						bind:value={app.request.lm_top_k}
@@ -793,18 +832,18 @@
 				>
 			</div>
 			<label
-				>Negative prompt
+				>Leave out
 				<textarea
 					rows="4"
-					placeholder="Styles or instruments to steer away from, e.g. saxophone, autotune, screaming, low quality..."
+					placeholder="Things you do not want, such as saxophone, autotune, screaming, or muddy sound"
 					bind:value={app.request.lm_negative_prompt}
 				></textarea>
 			</label>
 			<label
-				>Audio codes
+				>Saved song plan
 				<textarea
 					rows="4"
-					placeholder="Filled by Compose. Do not edit unless you know what you are doing."
+					placeholder="Created when you prepare the song. You normally do not need to edit this."
 					bind:value={app.request.audio_codes}
 				></textarea>
 			</label>
@@ -812,7 +851,9 @@
 	</details>
 
 	<div class="model-row">
-		<span class="model-label">Batch</span>
+		<span class="model-label" title="How many different lyric and song-plan versions to prepare"
+			>Number of versions</span
+		>
 		<input
 			type="number"
 			class="batch-input"
@@ -823,13 +864,15 @@
 			title="Number of LM variations per Compose. Server must be started with --max-batch N (default 1). Higher values use more VRAM for the KV cache."
 		/>
 		<span class="spacer"></span>
-		<span class="row-label">Pending</span>
+		<span class="row-label" title="Versions waiting for you to choose or send to the music maker"
+			>Waiting versions</span
+		>
 		<div class="pending-nav">
 			<button
 				type="button"
 				class="nav-btn"
 				onclick={() => switchPending(-1)}
-				title="Previous pending variation">&lt;</button
+				title="Show the previous waiting version">&lt;</button
 			>
 			<span class="nav-label"
 				>{app.pendingRequests.length > 0 ? app.pendingIndex + 1 : 0} / {app.pendingRequests
@@ -839,7 +882,7 @@
 				type="button"
 				class="nav-btn"
 				onclick={() => switchPending(1)}
-				title="Next pending variation">&gt;</button
+				title="Show the next waiting version">&gt;</button
 			>
 		</div>
 	</div>
@@ -849,22 +892,24 @@
 			type="button"
 			disabled={busy}
 			onclick={compose}
-			title="Step 2: LM inference to generate audio codes that drive the flow matching. Next: Synthesize."
-			>Compose</button
+			title="Prepare the words and musical plan before creating audio">Prepare song</button
 		>
 		<button
 			type="button"
 			disabled={!busyLm}
 			onclick={cancelPipeline}
-			title="Cancel the active LM job">Cancel</button
+			title="Stop preparing this song">Cancel</button
 		>
 	</div>
 
 	<details open>
-		<summary>Task</summary>
+		<summary
+			title="Choose whether to make something new, reshape a reference, or work with a section"
+			>What should happen?</summary
+		>
 		<div class="details-body">
 			<div class="model-row">
-				<span class="model-label">Type</span>
+				<span class="model-label">Use the song as</span>
 				<select
 					class="model-select"
 					value={taskType}
@@ -882,7 +927,8 @@
 				</select>
 			</div>
 			<div class="model-row track-row">
-				<span class="model-label">Track</span>
+				<span class="model-label" title="Choose which parts of the song to include">Song parts</span
+				>
 				<div class="track-grid">
 					{#each TRACK_NAMES as name}
 						<button
@@ -899,11 +945,13 @@
 	</details>
 
 	<details open class="has-clear">
-		<summary>Flow matching parameters</summary>
+		<summary title="Change how closely the new audio follows your plan or reference"
+			>How the sound is shaped</summary
+		>
 		<button
 			type="button"
 			class="clear-btn details-clear"
-			title="Clear flow matching parameters"
+			title="Clear the sound-shaping controls"
 			onclick={clearFlowMatching}
 			aria-label="Clear flow matching parameters"
 		>
@@ -912,28 +960,28 @@
 		<div class="details-body">
 			<div class="meta-grid">
 				<label
-					>Steps <input
+					>Quality steps <input
 						type="text"
 						placeholder={ph(dp?.inference_steps)}
 						bind:value={app.request.inference_steps}
 					/></label
 				>
 				<label
-					>Cover strength <input
+					>Reference strength <input
 						type="text"
 						placeholder={ph(d?.audio_cover_strength)}
 						bind:value={app.request.audio_cover_strength}
 					/></label
 				>
 				<label
-					>Cover noise <input
+					>Reference variation <input
 						type="text"
 						placeholder={ph(d?.cover_noise_strength)}
 						bind:value={app.request.cover_noise_strength}
 					/></label
 				>
 				<label
-					>Repaint start <input
+					>Change from <input
 						type="text"
 						placeholder={ph(d?.repainting_start)}
 						value={app.srcRangeStart != null ? Math.round(app.srcRangeStart * 100) / 100 : ''}
@@ -945,7 +993,7 @@
 					/></label
 				>
 				<label
-					>Repaint end <input
+					>Change until <input
 						type="text"
 						placeholder={ph(d?.repainting_end)}
 						value={app.srcRangeEnd != null ? Math.round(app.srcRangeEnd * 100) / 100 : ''}
@@ -956,32 +1004,38 @@
 					/></label
 				>
 				<label
-					>CFG scale <input
+					>Prompt strength <input
 						type="text"
 						placeholder={ph(dp?.guidance_scale)}
 						bind:value={app.request.guidance_scale}
 					/></label
 				>
 				<label
-					>Shift <input
+					>Sound movement <input
 						type="text"
 						placeholder={ph(dp?.shift)}
 						bind:value={app.request.shift}
 					/></label
 				>
 				<label
-					>Seed <input type="text" placeholder={ph(d?.seed)} bind:value={app.request.seed} /></label
+					>Random seed <input
+						type="text"
+						placeholder={ph(d?.seed)}
+						bind:value={app.request.seed}
+					/></label
 				>
 			</div>
 		</div>
 	</details>
 
 	<details class="has-clear">
-		<summary>Advanced and post-processing</summary>
+		<summary title="Optional controls for fine-tuning the final audio"
+			>More sound controls (advanced)</summary
+		>
 		<button
 			type="button"
 			class="clear-btn details-clear"
-			title="Clear advanced and post-processing"
+			title="Clear the extra sound controls"
 			onclick={clearAdvanced}
 			aria-label="Clear advanced and post-processing"
 		>
@@ -989,7 +1043,7 @@
 		</button>
 		<div class="details-body">
 			<label
-				>Custom scheduler <input
+				>Custom timing <input
 					type="text"
 					placeholder="Descending floats 1 -> 0, comma-separated"
 					bind:value={app.request.custom_timesteps}
@@ -997,7 +1051,7 @@
 			>
 			<div class="meta-grid">
 				<label
-					>DCW mode <select
+					>Detail balance <select
 						value={app.request.dcw_mode || d?.dcw_mode || ''}
 						onchange={(e) => {
 							app.request.dcw_mode = e.currentTarget.value;
@@ -1010,21 +1064,21 @@
 					</select></label
 				>
 				<label
-					>DCW scaler <input
+					>Detail amount <input
 						type="text"
 						placeholder={ph(d?.dcw_scaler)}
 						bind:value={app.request.dcw_scaler}
 					/></label
 				>
 				<label
-					>DCW high scaler <input
+					>High-detail amount <input
 						type="text"
 						placeholder={ph(d?.dcw_high_scaler)}
 						bind:value={app.request.dcw_high_scaler}
 					/></label
 				>
 				<label
-					>Solver <select
+					>Sound path <select
 						value={app.request.solver || d?.solver || ''}
 						onchange={(e) => {
 							app.request.solver = e.currentTarget.value;
@@ -1037,35 +1091,35 @@
 					</select></label
 				>
 				<label
-					>STORK substeps <input
+					>Extra sound steps <input
 						type="text"
 						placeholder={ph(d?.stork_substeps)}
 						bind:value={app.request.stork_substeps}
 					/></label
 				>
 				<label
-					>Latent shift <input
+					>Tone shift <input
 						type="text"
 						placeholder={ph(d?.latent_shift)}
 						bind:value={app.request.latent_shift}
 					/></label
 				>
 				<label
-					>Latent rescale <input
+					>Tone balance <input
 						type="text"
 						placeholder={ph(d?.latent_rescale)}
 						bind:value={app.request.latent_rescale}
 					/></label
 				>
 				<label
-					>Peak clip <input
+					>Trim peaks <input
 						type="text"
 						placeholder={ph(d?.peak_clip)}
 						bind:value={app.request.peak_clip}
 					/></label
 				>
 				<label
-					>MP3 bitrate <input
+					>MP3 quality <input
 						type="text"
 						placeholder={ph(d?.mp3_bitrate)}
 						bind:value={app.request.mp3_bitrate}
@@ -1076,7 +1130,9 @@
 	</details>
 
 	<div class="model-row">
-		<span class="model-label">Batch</span>
+		<span class="model-label" title="How many different audio versions to create"
+			>Number of versions</span
+		>
 		<input
 			type="number"
 			class="batch-input"
@@ -1087,10 +1143,10 @@
 			title="Number of DiT variations per request. Each uses a consecutive seed."
 		/>
 		<span class="spacer"></span>
-		<span class="model-label">Format</span>
+		<span class="model-label" title="Choose the audio file type to download">Download type</span>
 		<select
 			bind:value={app.format}
-			title="Output audio format. WAV32 outputs raw IEEE float without normalization."
+			title="MP3 is compact. WAV keeps more detail and uses more disk space."
 		>
 			<option value="mp3">MP3</option>
 			<option value="wav16">WAV16</option>
@@ -1100,12 +1156,26 @@
 	</div>
 
 	<div class="model-row cond-row">
-		<span class="model-label">Cond</span>
+		<span class="model-label" title="These lights show which information will guide the music maker"
+			>Guidance used</span
+		>
 		<div class="track-grid">
-			<span class="dit-ind" class:on={hasCodes}>LM codes</span>
-			<span class="dit-ind" class:on={hasSrc}>Src audio</span>
-			<span class="dit-ind" class:on={hasRange}>Range</span>
-			<span class="dit-ind" class:on={hasRef}>Timbre ref</span>
+			<span class="dit-ind" class:on={hasCodes} title="A prepared song plan is being used"
+				>Song plan</span
+			>
+			<span class="dit-ind" class:on={hasSrc} title="A source recording is being used"
+				>Source song</span
+			>
+			<span
+				class="dit-ind"
+				class:on={hasRange}
+				title="Only a selected part of the source song is being changed">Selected part</span
+			>
+			<span
+				class="dit-ind"
+				class:on={hasRef}
+				title="The tone and character of this reference are being used">Tone reference</span
+			>
 		</div>
 	</div>
 
@@ -1114,14 +1184,14 @@
 			type="button"
 			disabled={busy}
 			onclick={synthesize}
-			title="Step 3: DiT flow matching + VAE decoding to synthesize audio from codes. No green indicators above (LM codes, Src audio, Timbre ref)? The DiT will hallucinate freely from your prompt: very creative, but unpredictable."
-			>Synthesize</button
+			title="Create the audio using your description, song plan, and any selected reference"
+			>Create music</button
 		>
 		<button
 			type="button"
 			disabled={!busySynth}
 			onclick={cancelPipeline}
-			title="Cancel the active synth job">Cancel</button
+			title="Stop creating this song">Cancel</button
 		>
 	</div>
 </form>

@@ -4,6 +4,12 @@ project(acestep-ggml LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Keep packaged binaries relocatable. Production executables and the bundled
+# ggml backends are installed side by side in the Debian application
+# directory, so $ORIGIN lets the .deb run outside the build tree.
+set(CMAKE_BUILD_RPATH_USE_ORIGIN ON)
+set(CMAKE_INSTALL_RPATH "$ORIGIN")
+
 # version.h: embed git commit hash into all binaries.
 # runs on every build, only rewrites if the hash changed.
 set(VERSION_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/version.h")
@@ -145,10 +151,19 @@ add_custom_command(
 set_source_files_properties(${WEBUI_OUTPUT} PROPERTIES GENERATED TRUE)
 
 # ace-server: HTTP server (LM + synth endpoints + embedded webui)
-add_executable(ace-server tools/ace-server.cpp ${WEBUI_OUTPUT})
+add_executable(ace-server tools/ace-server.cpp tools/system-metrics.cpp ${WEBUI_OUTPUT})
 target_include_directories(ace-server PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(ace-server PRIVATE acestep-core httplib)
 link_ggml_backends(ace-server)
+
+# Local process supervisor used by the packaged desktop launcher. It keeps a
+# tiny control endpoint alive while ace-server is stopped, allowing the WebUI
+# power switch to start it again after a crash or intentional shutdown.
+if(UNIX)
+    add_executable(acestep-supervisor tools/acestep-supervisor.cpp)
+    target_link_libraries(acestep-supervisor PRIVATE httplib Threads::Threads)
+    add_dependencies(acestep-supervisor version)
+endif()
 
 add_executable(ace-understand tools/ace-understand.cpp)
 target_link_libraries(ace-understand PRIVATE acestep-core)

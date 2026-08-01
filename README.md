@@ -27,8 +27,8 @@ Alternative: `./models.sh` downloads the default set automatically (needs `pip i
 ## Build
 
 ```
-git clone --recurse-submodules https://github.com/ServeurpersoCom/acestep.cpp.git
-cd acestep.cpp
+git clone --recurse-submodules https://github.com/cpntodd/acestep.cpp-polaris.git
+cd acestep.cpp-polaris
 ```
 
 ### Windows
@@ -68,6 +68,47 @@ server.cmd        # Windows
 
 Open http://localhost:8085 in your browser. The WebUI handles everything:
 write a caption, set lyrics and metadata, generate, play, and download tracks.
+
+### Debian desktop package
+
+On amd64 Debian or Ubuntu, the repository checkout can be packaged as a
+branded desktop application. The package embeds the built WebUI, native
+runtime, ggml backends, adapters, and every GGUF file currently in `models/`:
+
+```bash
+./packaging/build-deb.sh
+sudo apt install ./dist/acestep-cpp_*.deb
+```
+
+Launch **ACE-Step.cpp** from the application menu, or run `acestep-cpp`.
+The top-right retro **SERVER ON|OFF** switch controls the local backend. The
+package supervisor keeps that switch usable after a crash or an intentional
+stop; `acestep-cpp-stop` is also available as a terminal fallback.
+
+The amd64 build uses Release optimizations, native CPU instructions, and the
+Vulkan backend when available. CPU work defaults to one worker per physical
+core; set `ACESTEP_CPU_THREADS=6` before launching if you want to pin this
+Ryzen 5 2600 profile explicitly. The RX 580 is selected automatically by the
+Vulkan backend. GPU drivers remain host dependencies because kernel/device
+drivers cannot be safely embedded in a Debian application.
+
+### Reference tracks
+
+Drop an MP3 or WAV into the WebUI to keep it in the browser's local library.
+Choose **Analyze style** to run the local reverse pipeline (`/understand`):
+the LM returns a reusable style prompt plus detected lyrics, BPM, duration,
+key, time signature, and vocal language. The card keeps the encoded latent
+locally, so later source/timbre conditioning can reuse it without another VAE
+encode. **Use style** copies the profile into Compose; **Source** and
+**Timbre** arm the same track for cover and timbre conditioning.
+
+Audio is not uploaded to a third-party service by the WebUI. It is sent only
+to the local `ace-server` when analysis or generation is explicitly started.
+
+Reference cards can export an `.acestep-template.zip` containing the local
+audio, prompt/style profile, request settings, and cached VAE latents. Import a
+template from the reference drop zone to restore it into the browser-local
+library and load its settings for further editing.
 
 Models are loaded on first request (zero GPU at startup) and swapped
 automatically when you pick a different one in the UI.
@@ -140,6 +181,10 @@ audio. The client can replay any captured latent back as `src_latents` /
 entirely, or feed it to /vae decode to reproduce the matching audio.
 
 **GET /health** - Returns `{"status":"ok"}`.
+
+**POST /shutdown** - Localhost-only emergency shutdown for a directly launched
+server. The packaged desktop build normally uses its supervisor for stop and
+restart control.
 
 **GET /props** - Available models, server config, default parameters.
 

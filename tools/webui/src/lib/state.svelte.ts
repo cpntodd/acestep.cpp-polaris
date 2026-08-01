@@ -1,4 +1,4 @@
-import type { AceRequest, AceProps, Song } from './types.js';
+import type { AceRequest, AceProps, Song, SystemMetrics } from './types.js';
 
 const STORAGE_KEY = 'ace';
 
@@ -32,7 +32,7 @@ function load(): Saved {
 		name: '',
 		volume: 0.5,
 		format: 'mp3',
-		dark: false,
+		dark: true,
 		logsOpen: true,
 		request: { caption: '', use_cot_caption: true }
 	};
@@ -49,6 +49,7 @@ export const app = $state({
 	request: saved.request as AceRequest,
 	songs: [] as Song[],
 	props: null as AceProps | null,
+	metrics: null as SystemMetrics | null,
 	toast: '' as string,
 	toastOk: false,
 	pendingRequests: [] as AceRequest[],

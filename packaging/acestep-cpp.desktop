@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=ACE-Step.cpp
+GenericName=Local AI Music Lab
+Comment=Private local AI music generation from cpntodd/acestep.cpp-polaris
+Exec=acestep-cpp
+TryExec=acestep-cpp
+Icon=acestep-cpp
+Terminal=false
+Categories=AudioVideo;
+Keywords=ACE-Step;music;audio;AI;generator;lyrics;reference;
+StartupNotify=true
+StartupWMClass=acestep-cpp
+X-GNOME-UsesNotifications=true

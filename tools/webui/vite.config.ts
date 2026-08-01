@@ -69,6 +69,7 @@ export default defineConfig({
 			'/understand': 'http://localhost:8080',
 			'/health': 'http://localhost:8080',
 			'/props': 'http://localhost:8080',
+			'/metrics': 'http://localhost:8080',
 			'/logs': 'http://localhost:8080'
 		}
 	},

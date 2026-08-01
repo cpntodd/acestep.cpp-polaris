@@ -64,6 +64,26 @@ export interface AceProps {
 	};
 }
 
+export interface SystemMetrics {
+	cpu: {
+		available: boolean;
+		usage: number;
+		cores: number;
+	};
+	gpu: {
+		available: boolean;
+		usage_available: boolean;
+		usage: number;
+		name: string;
+		backend: string;
+	};
+	vram: {
+		available: boolean;
+		used: number;
+		total: number;
+	};
+}
+
 // what we store in IndexedDB per song
 export interface Song {
 	id?: number;
@@ -75,6 +95,17 @@ export interface Song {
 	duration: number;
 	request: AceRequest;
 	audio: Blob;
+	// Imported reference tracks are kept in the browser's IndexedDB library.
+	// Generated tracks leave this unset so the UI can distinguish a source
+	// recording from a local result without changing the server contract.
+	source?: 'upload' | 'generated';
+	// The caption returned by /understand is the reusable style prompt. Keep
+	// an explicit copy so a user can tell an analyzed reference from a track
+	// that merely happens to have a caption.
+	stylePrompt?: string;
+	analysisState?: 'unscanned' | 'analyzing' | 'ready' | 'error';
+	analysisError?: string;
+	analyzedAt?: number;
 	// user-marked favorite, persisted across reloads. Acts as a sticky
 	// flag for the bulk "Delete non-favorites" action.
 	favorite?: boolean;

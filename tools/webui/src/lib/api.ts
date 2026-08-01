@@ -1,5 +1,60 @@
-import type { AceRequest, AceProps } from './types.js';
+import type { AceRequest, AceProps, SystemMetrics } from './types.js';
 import { FETCH_TIMEOUT_MS, JOB_POLL_MS } from './config.js';
+
+const CONTROL_PORT = 8081;
+
+function controlUrl(path: string): string {
+	const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+	const host = window.location.hostname || '127.0.0.1';
+	return `${protocol}//${host}:${CONTROL_PORT}${path}`;
+}
+
+async function controlRequest(path: string, init?: RequestInit): Promise<Response> {
+	const res = await fetch(controlUrl(path), {
+		...init,
+		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+	});
+	if (!res.ok) {
+		const err = await res.json().catch(() => ({ error: res.statusText }));
+		throw new Error(`${res.status} ${err.error || res.statusText}`);
+	}
+	return res;
+}
+
+export type ServerControlState = 'on' | 'off';
+
+export interface ServerControlStatus {
+	state: ServerControlState;
+	pid: number;
+	server_port: number;
+}
+
+// GET /status on the packaged localhost supervisor. The fallback UI remains
+// useful after ace-server exits because this endpoint has its own process.
+export async function serverControlStatus(): Promise<ServerControlStatus> {
+	const res = await controlRequest('/status');
+	return res.json();
+}
+
+// POST /start: restart ace-server after an intentional stop or crash.
+export async function startServer(): Promise<void> {
+	await controlRequest('/start', { method: 'POST' });
+}
+
+// POST /stop: stop the supervised backend. Direct launches fall back to the
+// ace-server endpoint so the emergency switch also works outside the .deb.
+export async function stopServer(): Promise<void> {
+	try {
+		await controlRequest('/stop', { method: 'POST' });
+		return;
+	} catch (supervisorError) {
+		const res = await fetch('shutdown', {
+			method: 'POST',
+			signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+		});
+		if (!res.ok) throw supervisorError;
+	}
+}
 
 // shared: submit a request and return the job ID
 async function submitJob(url: string, init: RequestInit): Promise<string> {
@@ -76,6 +131,13 @@ export function synthSubmitWithAudio(
 	if (refLatents) form.append('ref_latents', refLatents, 'ref.latents');
 	else if (refAudio) form.append('ref_audio', refAudio, 'ref.audio');
 	return submitJob('synth', { method: 'POST', body: form });
+}
+
+// GET /metrics: local CPU, GPU and VRAM telemetry for the live gauge dock.
+export async function metrics(): Promise<SystemMetrics> {
+	const res = await fetch('metrics', { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+	if (!res.ok) throw new Error(`${res.status} Metrics unavailable`);
+	return res.json();
 }
 
 // GET /job?id=X: poll job status

@@ -3,27 +3,27 @@
 		Play,
 		Square,
 		Pencil,
-		Ear,
 		Download,
 		Cpu,
 		Trash2,
 		ChevronDown,
 		Heart,
 		Type,
-		TriangleAlert
+		TriangleAlert,
+		Sparkles,
+		Radio,
+		ScanLine,
+		Link2,
+		Archive
 	} from '@lucide/svelte';
 	import { app, setRequest, toast } from '../lib/state.svelte.js';
 	import { deleteSong } from '../lib/db.js';
-	import {
-		understandSubmit,
-		vaeEncode,
-		pollJob,
-		jobResultUnderstand,
-		jobResultLatents
-	} from '../lib/api.js';
+	import { vaeEncode, pollJob, jobResultLatents } from '../lib/api.js';
 	import { saveJob, clearJob, putSong } from '../lib/db.js';
 	import type { Song } from '../lib/types.js';
 	import { displaySongName } from '../lib/songName.js';
+	import { analyzeReferenceSong } from '../lib/reference.js';
+	import { exportReferenceTemplate, referenceTemplateFilename } from '../lib/template.js';
 	import Waveform from './Waveform.svelte';
 	import Menu, { type MenuItem } from './Menu.svelte';
 	import Dialog from './Dialog.svelte';
@@ -38,18 +38,22 @@
 
 	let isRef = $derived(app.refSongId === song.id);
 	let isSrc = $derived(app.srcSongId === song.id);
+	let isReference = $derived(song.source === 'upload');
+	let hasStyleProfile = $derived(!!song.stylePrompt || song.analysisState === 'ready');
+
+	function languageLabel(code: string | undefined): string {
+		if (!code) return '—';
+		const labels: Record<string, string> = {
+			mk: 'Macedonian',
+			sr: 'Serbian',
+			bg: 'Bulgarian'
+		};
+		return labels[code.toLowerCase()] ? `${labels[code.toLowerCase()]} (${code})` : code;
+	}
 
 	// "(variant task)" suffix rebuilt from the request, used for the card
 	// title and download filenames. Song.name itself stays the base name.
 	let displayName = $derived(displaySongName(song));
-
-	function toggleRef() {
-		if (isRef) {
-			app.refSongId = null;
-		} else {
-			app.refSongId = song.id ?? null;
-		}
-	}
 
 	function toggleSrc() {
 		if (isSrc) {
@@ -60,6 +64,17 @@
 			rangeEnd = 0;
 		} else {
 			app.srcSongId = song.id ?? null;
+			app.request.task_type = 'cover';
+			toast('Source context armed — Cover mode enabled', 2800, true);
+		}
+	}
+
+	function toggleTimbre() {
+		if (isRef) {
+			app.refSongId = null;
+		} else {
+			app.refSongId = song.id ?? null;
+			toast('Timbre reference armed', 2400, true);
 		}
 	}
 
@@ -111,42 +126,37 @@
 	async function scan() {
 		scanning = true;
 		try {
-			const jobId = await understandSubmit(
-				song.latents ? null : song.audio,
-				song.latents ?? null,
+			const { requests } = await analyzeReferenceSong(
+				song,
 				app.request.lm_model as string,
 				app.request.synth_model as string
 			);
-			saveJob('lm', jobId);
-			await pollJob(jobId);
-			const { requests, latents } = await jobResultUnderstand(jobId);
-			clearJob('lm');
-			if (song.id != null) {
-				const useNewRequest = requests.length > 0 && !song.request.caption;
-				const newRequest = useNewRequest ? requests[0] : song.request;
-				const dirty = (latents && latents !== song.latents) || newRequest !== song.request;
-				if (dirty) {
-					if (latents) song.latents = latents;
-					if (useNewRequest) {
-						song.request = newRequest;
-						song.caption = newRequest.caption ?? song.caption;
-						song.seed = newRequest.seed ?? song.seed;
-						song.duration = newRequest.duration ?? song.duration;
-					}
-					await putSong($state.snapshot(song));
-				}
-			}
+			if (song.id != null) await putSong($state.snapshot(song));
 			app.name = song.name;
-			if (requests.length > 0) {
-				setRequest(requests[0]);
-			}
+			setRequest({ ...song.request });
 			app.pendingRequests = requests;
 			app.pendingIndex = 0;
 		} catch (e: unknown) {
+			song.analysisState = 'error';
+			song.analysisError = e instanceof Error ? e.message : String(e);
+			if (song.id != null) await putSong($state.snapshot(song)).catch(() => {});
 			toast(e instanceof Error ? e.message : String(e));
 		} finally {
 			scanning = false;
 		}
+	}
+
+	function applyStyle() {
+		const style = song.stylePrompt || song.request.caption;
+		if (!style) {
+			toast('Analyze this reference first to create a style profile');
+			return;
+		}
+		setRequest({ ...song.request, caption: style });
+		app.name = `${song.name} · new take`;
+		app.pendingRequests = [];
+		app.pendingIndex = 0;
+		toast('Style profile copied to Compose', 2800, true);
 	}
 
 	function downloadAudio() {
@@ -158,6 +168,22 @@
 		a.download = `${safe}${ext}`;
 		a.click();
 		URL.revokeObjectURL(url);
+	}
+
+	async function exportTemplate() {
+		if (!isReference) return;
+		try {
+			const blob = await exportReferenceTemplate($state.snapshot(song));
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = referenceTemplateFilename(song);
+			a.click();
+			URL.revokeObjectURL(url);
+			toast('Reference template exported', 2600, true);
+		} catch (e: unknown) {
+			toast(e instanceof Error ? e.message : String(e));
+		}
 	}
 
 	// Download the cached latents blob as a .vae file. Symmetric to
@@ -272,21 +298,81 @@
 	// flow (tweak prompt -> rename -> grab audio -> work with latents -> inspect -> destroy).
 	// Destructive entries open a confirm dialog.
 	const actionItems: MenuItem[] = $derived([
-		{ icon: Pencil, label: 'Edit prompt', onSelect: load },
-		{ icon: Type, label: 'Rename song', onSelect: openRename },
-		{ icon: Download, label: 'Download audio', onSelect: downloadAudio },
-		{ icon: Cpu, label: 'Compute VAE latents', onSelect: encodeOnly, disabled: !!song.latents },
+		{
+			icon: Pencil,
+			label: 'Edit song details',
+			hint: 'Load this song back into the form for editing',
+			onSelect: load
+		},
+		{
+			icon: Type,
+			label: 'Rename song',
+			hint: 'Change the name shown in your local library',
+			onSelect: openRename
+		},
+		{
+			icon: Download,
+			label: 'Download audio',
+			hint: 'Save this song as an MP3 or WAV file',
+			onSelect: downloadAudio
+		},
+		{
+			icon: Archive,
+			label: 'Export reference template',
+			hint: 'Save the audio, style description, settings, and cached analysis as one ZIP file',
+			onSelect: exportTemplate,
+			disabled: !isReference
+		},
+		{
+			icon: Cpu,
+			label: 'Prepare audio for reuse',
+			hint: 'Save a local copy that makes future reference use faster',
+			onSelect: encodeOnly,
+			disabled: !!song.latents
+		},
 		{
 			icon: Download,
 			label: 'Download VAE latents',
+			hint: 'Save the prepared audio data for later use',
 			onSelect: downloadLatents,
 			disabled: !song.latents
 		},
-		{ icon: Ear, label: 'LM understand', onSelect: scan },
-		{ icon: Trash2, label: 'Delete this track', onSelect: () => (confirmDeleteOpen = true) },
+		{
+			icon: ScanLine,
+			label: hasStyleProfile ? 'Refresh style profile' : 'Analyze style',
+			hint: 'Read the track locally and find its style, lyrics, tempo, key, and other song details',
+			onSelect: scan,
+			disabled: scanning
+		},
+		{
+			icon: Sparkles,
+			label: 'Use this style',
+			hint: 'Copy the discovered style description into the song form',
+			onSelect: applyStyle,
+			disabled: !hasStyleProfile
+		},
+		{
+			icon: Radio,
+			label: 'Use as source song',
+			hint: 'Use this recording as the starting audio for a new version',
+			onSelect: toggleSrc
+		},
+		{
+			icon: Link2,
+			label: 'Use its tone',
+			hint: 'Use this recording to guide the voice and character of a new song',
+			onSelect: toggleTimbre
+		},
+		{
+			icon: Trash2,
+			label: 'Delete this song',
+			hint: 'Remove this song and its local audio from the library',
+			onSelect: () => (confirmDeleteOpen = true)
+		},
 		{
 			icon: TriangleAlert,
 			label: 'Delete non-favorites',
+			hint: 'Remove every library item that is not marked as a favorite',
 			onSelect: () => (confirmDeleteNonFavOpen = true)
 		}
 	]);
@@ -301,7 +387,13 @@
 				<Play size={14} />
 			{/if}
 		</button>
-		<span class="card-name">{displayName}</span>
+		<div class="track-identity">
+			<span class="card-name">{displayName}</span>
+			<div class="track-badges">
+				{#if isReference}<span class="track-badge reference">REFERENCE</span>{/if}
+				{#if hasStyleProfile}<span class="track-badge analyzed">PROFILE READY</span>{/if}
+			</div>
+		</div>
 		<Menu items={actionItems}>
 			{#snippet trigger()}<ChevronDown size={14} /> Menu{/snippet}
 		</Menu>
@@ -322,6 +414,34 @@
 		bind:rangeStart
 		bind:rangeEnd
 	/>
+	{#if isReference || song.stylePrompt}
+		<div class="style-profile" class:profile-error={song.analysisState === 'error'}>
+			<div class="profile-header">
+				<span><Sparkles size={13} /> DISCOVERED STYLE</span
+				>{#if song.analysisState === 'analyzing'}<b class="profile-scanning">LISTENING…</b
+					>{:else if song.analysisState === 'error'}<b>RETRY ANALYSIS</b
+					>{:else if hasStyleProfile}<b>FOUND ON THIS COMPUTER</b>{/if}
+			</div>
+			{#if song.analysisState === 'error'}
+				<p>{song.analysisError || 'Analyzer unavailable'}</p>
+			{:else if hasStyleProfile}
+				<p>{song.stylePrompt || song.request.caption}</p>
+				<div class="profile-metadata">
+					<span><b>{song.request.bpm || '—'}</b> BPM</span>
+					<span
+						><b>{song.request.duration ? `${Math.round(song.request.duration)}s` : '—'}</b> LENGTH</span
+					>
+					<span><b>{song.request.keyscale || '—'}</b> KEY</span>
+					<span><b>{song.request.timesignature || '—'}</b> BEAT</span>
+					<span><b>{languageLabel(song.request.vocal_language)}</b> SINGING</span>
+				</div>
+			{:else}
+				<p class="profile-empty">
+					Run Analyze style to extract the prompt and settings from this track.
+				</p>
+			{/if}
+		</div>
+	{/if}
 	<div class="card-footer">
 		<span class="format-badge">{song.format.toUpperCase()}</span>
 		{#if song.latents}
@@ -329,23 +449,32 @@
 		{/if}
 		<span class="timecode">{fmtPos(time)} / {fmtDur(dur)}</span>
 		<div class="card-actions">
-			<label class="icon-btn"
+			{#if isReference && !hasStyleProfile}
+				<button class="small-action primary" type="button" onclick={scan} disabled={scanning}
+					><ScanLine size={13} /> {scanning ? 'Listening…' : 'Analyze style'}</button
+				>
+			{:else if hasStyleProfile}
+				<button class="small-action primary" type="button" onclick={applyStyle}
+					><Sparkles size={13} /> Use style</button
+				>
+			{/if}
+			<label class="source-toggle"
 				><input
 					type="checkbox"
 					class="ref-check"
 					checked={isSrc}
 					onchange={toggleSrc}
 					title="Source audio"
-				/> Src audio</label
+				/> Source</label
 			>
-			<label class="icon-btn"
+			<label class="source-toggle"
 				><input
 					type="checkbox"
 					class="ref-check"
 					checked={isRef}
-					onchange={toggleRef}
+					onchange={toggleTimbre}
 					title="Timbre reference"
-				/> Timbre ref</label
+				/> Timbre</label
 			>
 		</div>
 	</div>
@@ -369,51 +498,86 @@
 	.card {
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
-		padding: 0.5rem;
-		border: none;
-		border-radius: 4px;
+		gap: 0.55rem;
+		padding: 0.85rem;
+		border: 1px solid var(--line);
+		border-radius: 0.65rem;
 		background: var(--bg-card);
+		box-shadow: 0 10px 25px rgba(0, 0, 0, 0.09);
+		transition:
+			border-color 180ms ease,
+			transform 180ms ease,
+			box-shadow 180ms ease;
+	}
+	.card:hover {
+		border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+		transform: translateY(-1px);
+		box-shadow: 0 14px 32px rgba(0, 0, 0, 0.14);
 	}
 	.card-header {
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
 	}
+	.track-identity {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		min-width: 0;
+		flex: 1;
+	}
+	.track-badges {
+		display: flex;
+		gap: 0.3rem;
+	}
+	.track-badge {
+		font: 0.55rem var(--mono);
+		letter-spacing: 0.05em;
+		color: var(--muted);
+	}
+	.track-badge.reference {
+		color: var(--accent);
+	}
+	.track-badge.analyzed {
+		color: var(--ok);
+	}
 	.card-footer {
 		display: flex;
 		align-items: center;
-		gap: 0.4rem;
+		gap: 0.55rem;
+		flex-wrap: wrap;
 	}
 	.card-name {
-		font-size: 0.8rem;
+		font-size: 0.82rem;
+		font-weight: 600;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		flex: 1;
 	}
 	.format-badge {
-		font-size: 0.6rem;
-		font-family: monospace;
+		font: 0.55rem var(--mono);
+		letter-spacing: 0.05em;
 		padding: 0.05rem 0.3rem;
-		border-radius: 2px;
-		background: var(--fg);
-		color: var(--bg);
+		border: 1px solid var(--line-strong);
+		border-radius: 0.2rem;
+		background: var(--surface-soft);
+		color: var(--muted);
 		flex-shrink: 0;
 	}
 	.timecode {
-		font-size: 0.7rem;
-		font-family: monospace;
-		color: var(--fg);
+		font: 0.62rem var(--mono);
+		color: var(--muted);
 		white-space: nowrap;
 		flex: 1;
 	}
 	.card-actions {
 		display: flex;
 		align-items: center;
-		gap: 0.2rem;
+		gap: 0.35rem;
 		flex-shrink: 0;
-		font-size: 0.8rem;
+		font-size: 0.67rem;
+		margin-left: auto;
 	}
 	.icon-btn {
 		background: none;
@@ -432,6 +596,98 @@
 	.ref-check {
 		cursor: pointer;
 		accent-color: var(--focus);
+	}
+	.source-toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.22rem;
+		color: var(--muted);
+		white-space: nowrap;
+		cursor: pointer;
+	}
+	.source-toggle:hover {
+		color: var(--accent);
+	}
+	.small-action {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.32rem 0.48rem;
+		border: 1px solid var(--line);
+		border-radius: 0.3rem;
+		background: var(--surface-soft);
+		color: var(--fg);
+		font: 0.6rem var(--mono);
+		cursor: pointer;
+	}
+	.small-action.primary {
+		border-color: rgba(240, 144, 64, 0.5);
+		background: rgba(240, 144, 64, 0.12);
+		color: var(--accent);
+	}
+	.small-action:hover:not(:disabled) {
+		border-color: var(--accent);
+	}
+	.small-action:disabled {
+		opacity: 0.6;
+		cursor: wait;
+	}
+	.style-profile {
+		padding: 0.75rem;
+		border: 1px solid rgba(240, 144, 64, 0.26);
+		border-radius: 0.45rem;
+		background: linear-gradient(135deg, rgba(240, 144, 64, 0.09), rgba(240, 144, 64, 0.025));
+	}
+	.style-profile.profile-error {
+		border-color: rgba(214, 91, 82, 0.45);
+		background: rgba(214, 91, 82, 0.08);
+	}
+	.profile-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		margin-bottom: 0.45rem;
+		color: var(--accent);
+		font: 0.58rem var(--mono);
+		letter-spacing: 0.08em;
+	}
+	.profile-header span {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+	}
+	.profile-header b {
+		color: var(--muted);
+		font-weight: 400;
+	}
+	.profile-scanning {
+		animation: profile-pulse 1s ease-in-out infinite;
+	}
+	.style-profile p {
+		color: var(--fg);
+		font-size: 0.78rem;
+		line-height: 1.5;
+	}
+	.style-profile .profile-empty {
+		color: var(--muted);
+	}
+	.profile-metadata {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.65rem;
+		margin-top: 0.65rem;
+		color: var(--muted);
+		font: 0.58rem var(--mono);
+	}
+	.profile-metadata b {
+		color: var(--fg);
+		font-weight: 400;
+	}
+	@keyframes profile-pulse {
+		50% {
+			opacity: 0.45;
+		}
 	}
 	.rename-input {
 		width: 100%;

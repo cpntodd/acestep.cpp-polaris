@@ -7,6 +7,7 @@
 	// match this shape without binding us to @lucide/svelte here).
 	export interface MenuItem {
 		label: string;
+		hint?: string;
 		onSelect: () => void;
 		disabled?: boolean;
 		icon?: Component<{ size?: number }>;
@@ -68,6 +69,7 @@
 					type="button"
 					class="menu-item"
 					disabled={item.disabled}
+					title={item.hint || item.label}
 					onclick={() => select(item)}
 				>
 					{#if Icon}<Icon size={14} />{/if}
@@ -84,26 +86,29 @@
 		display: inline-block;
 	}
 	.menu-trigger {
-		background: none;
-		border: none;
+		background: var(--surface-soft);
+		border: 1px solid var(--line);
+		border-radius: 0.35rem;
 		cursor: pointer;
-		padding: 0.15rem;
-		color: var(--fg);
+		padding: 0.28rem 0.42rem;
+		color: var(--muted);
 		display: flex;
 		align-items: center;
 		gap: 0.2rem;
 		font-size: 0.8rem;
 	}
 	.menu-trigger:hover {
-		color: var(--focus);
+		color: var(--accent);
+		border-color: var(--accent);
 	}
 	.menu-items {
 		position: absolute;
 		top: calc(100% + 2px);
 		right: 0;
 		background: var(--bg-card);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-		border-radius: 3px;
+		border: 1px solid var(--line-strong);
+		box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
+		border-radius: 0.4rem;
 		display: flex;
 		flex-direction: column;
 		min-width: 8rem;
@@ -113,7 +118,7 @@
 		background: none;
 		border: none;
 		cursor: pointer;
-		padding: 0.15rem 0.5rem;
+		padding: 0.45rem 0.6rem;
 		color: var(--fg);
 		text-align: left;
 		font-size: 0.8rem;
@@ -123,7 +128,8 @@
 		gap: 0.4rem;
 	}
 	.menu-item:hover:not(:disabled) {
-		background: var(--bg-btn-hover);
+		background: rgba(240, 144, 64, 0.12);
+		color: var(--accent);
 	}
 	.menu-item:disabled {
 		color: var(--fg-dim);

@@ -1,0 +1,56 @@
+#!/bin/bash
+set -euo pipefail
+
+APP_DIR="/usr/lib/acestep-cpp"
+PORT="${ACESTEP_PORT:-8080}"
+# The WebUI's friendly power switch uses this fixed local control port.
+CONTROL_PORT=8081
+URL="http://127.0.0.1:${PORT}"
+STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/acestep-cpp"
+LOG_FILE="${STATE_DIR}/server.log"
+PID_FILE="${STATE_DIR}/supervisor.pid"
+
+mkdir -p "${STATE_DIR}"
+
+open_ui() {
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "${URL}" >/dev/null 2>&1 || true
+    else
+        echo "ACE-Step.cpp is ready at ${URL}"
+    fi
+}
+
+if [ -f "${PID_FILE}" ] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
+    open_ui
+    exit 0
+fi
+
+if [ ! -x "${APP_DIR}/acestep-supervisor" ]; then
+    echo "ACE-Step.cpp supervisor is missing from ${APP_DIR}" >&2
+    exit 1
+fi
+
+echo "[ACE-Step.cpp] Starting local engine at ${URL}"
+nohup "${APP_DIR}/acestep-supervisor" \
+    --server "${APP_DIR}/ace-server" \
+    --server-port "${PORT}" \
+    --control-port "${CONTROL_PORT}" \
+    --models "${APP_DIR}/models" \
+    --adapters "${APP_DIR}/adapters" \
+    >>"${LOG_FILE}" 2>&1 &
+echo $! >"${PID_FILE}"
+
+for _ in $(seq 1 90); do
+    if curl --silent --fail --max-time 2 "${URL}/health" >/dev/null 2>&1; then
+        open_ui
+        exit 0
+    fi
+    if ! kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
+        echo "ACE-Step.cpp supervisor exited. See ${LOG_FILE}" >&2
+        exit 1
+    fi
+    sleep 1
+done
+
+echo "ACE-Step.cpp did not become ready. See ${LOG_FILE}" >&2
+exit 1

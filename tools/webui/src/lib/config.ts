@@ -1,5 +1,6 @@
 // UI constants
 export const PROPS_POLL_MS = 10000;
+export const METRICS_POLL_MS = 1500;
 export const FETCH_TIMEOUT_MS = 2000;
 export const JOB_POLL_MS = 2000;
 export const SSE_RECONNECT_MS = 2000;

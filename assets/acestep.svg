@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6d28d9"/>
+      <stop offset="1" stop-color="#db2777"/>
+    </linearGradient>
+    <linearGradient id="bars" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#bg)"/>
+  <!-- waveform bars -->
+  <rect x="20" y="46" width="7" height="36" rx="3.5" fill="url(#bars)"/>
+  <rect x="33" y="32" width="7" height="64" rx="3.5" fill="url(#bars)"/>
+  <rect x="46" y="22" width="7" height="84" rx="3.5" fill="url(#bars)"/>
+  <rect x="59" y="40" width="7" height="48" rx="3.5" fill="url(#bars)"/>
+  <rect x="72" y="28" width="7" height="72" rx="3.5" fill="url(#bars)"/>
+  <rect x="85" y="50" width="7" height="28" rx="3.5" fill="url(#bars)"/>
+  <rect x="98" y="36" width="7" height="56" rx="3.5" fill="url(#bars)"/>
+  <!-- music note -->
+  <circle cx="50" cy="86" r="9" fill="#0f172a"/>
+  <circle cx="80" cy="80" r="9" fill="#0f172a"/>
+  <rect x="55" y="82" width="5" height="32" rx="2.5" fill="#0f172a"/>
+  <rect x="85" y="76" width="5" height="32" rx="2.5" fill="#0f172a"/>
+</svg>
