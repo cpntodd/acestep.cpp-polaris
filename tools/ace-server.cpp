@@ -1888,6 +1888,11 @@ int main(int argc, char ** argv) {
                 res.set_content("Error: gzip is not supported by this browser", "text/plain");
             } else {
                 res.set_header("Content-Encoding", "gzip");
+                // The embedded app changes with the native binary. Do not let
+                // a browser keep an older page after an upgrade or restart;
+                // stale HTML was hiding newly added controls in the WebUI.
+                res.set_header("Cache-Control", "no-store, no-cache, must-revalidate");
+                res.set_header("Pragma", "no-cache");
                 res.set_content(reinterpret_cast<const char *>(index_html_gz), index_html_gz_len,
                                 "text/html; charset=utf-8");
             }

@@ -1,13 +1,18 @@
 <script lang="ts">
-	import { Archive, AudioLines, LockKeyhole, Upload, WandSparkles } from '@lucide/svelte';
+	import { Archive, AudioLines, LockKeyhole, ScanLine, Upload, WandSparkles } from '@lucide/svelte';
 	import { app, setRequest, toast } from '../lib/state.svelte.js';
-	import { isReferenceAudio, storeReferenceTrack } from '../lib/reference.js';
+	import { putSong } from '../lib/db.js';
+	import { analyzeReferenceSong, isReferenceAudio, storeReferenceTrack } from '../lib/reference.js';
 	import { importReferenceTemplate, isReferenceTemplate } from '../lib/template.js';
 
 	let input: HTMLInputElement;
 	let templateInput: HTMLInputElement;
 	let dragging = $state(false);
 	let importing = $state(false);
+	let analyzingBatch = $state(false);
+	let batchTargets = $derived(
+		app.songs.filter((song) => song.source === 'upload' && song.analysisState !== 'ready').length
+	);
 
 	async function importFile(file: File | undefined) {
 		if (!file) return;
@@ -54,6 +59,44 @@
 		event.preventDefault();
 		dragging = false;
 		void importFile(event.dataTransfer?.files?.[0]);
+	}
+
+	async function analyzeBatch() {
+		const targets = app.songs.filter(
+			(song) =>
+				song.source === 'upload' &&
+				song.analysisState !== 'ready' &&
+				song.analysisState !== 'analyzing'
+		);
+		if (targets.length === 0) {
+			toast('All saved reference songs already have a style profile.', 3200, true);
+			return;
+		}
+		analyzingBatch = true;
+		let completed = 0;
+		let failed = 0;
+		try {
+			for (const song of targets) {
+				try {
+					await analyzeReferenceSong(
+						song,
+						app.request.lm_model as string,
+						app.request.synth_model as string
+					);
+					if (song.id != null) await putSong($state.snapshot(song));
+					completed++;
+				} catch {
+					failed++;
+				}
+			}
+			toast(
+				`Finished: ${completed} analyzed${failed ? `, ${failed} could not be read` : ''}.`,
+				5000,
+				failed === 0
+			);
+		} finally {
+			analyzingBatch = false;
+		}
 	}
 </script>
 
@@ -103,6 +146,20 @@
 			<Archive size={14} /> Import template
 		</button>
 	</div>
+	{#if batchTargets > 0}
+		<button
+			class="batch-analyze"
+			type="button"
+			disabled={analyzingBatch || importing}
+			onclick={analyzeBatch}
+			title="Read every saved reference song one at a time and save its style, lyrics, tempo, key, and settings"
+		>
+			<ScanLine size={14} />
+			{analyzingBatch
+				? 'Reading saved songs…'
+				: `Read ${batchTargets} saved ${batchTargets === 1 ? 'style' : 'styles'}`}
+		</button>
+	{/if}
 	<div class="upload-note" title="Your reference audio stays in this browser's local storage">
 		<LockKeyhole size={13} /> Stays on this computer · MP3 / WAV
 	</div>
@@ -230,6 +287,30 @@
 	.template-button:disabled {
 		opacity: 0.65;
 		cursor: wait;
+	}
+	.batch-analyze {
+		position: relative;
+		z-index: 1;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
+		grid-column: 2;
+		justify-self: start;
+		padding: 0.5rem 0.7rem;
+		border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--line));
+		border-radius: 0.4rem;
+		background: rgba(240, 144, 64, 0.1);
+		color: var(--accent);
+		font: 0.65rem var(--mono);
+		cursor: pointer;
+	}
+	.batch-analyze:hover:not(:disabled) {
+		background: rgba(240, 144, 64, 0.18);
+	}
+	.batch-analyze:disabled {
+		cursor: wait;
+		opacity: 0.65;
 	}
 	.upload-button:hover:not(:disabled) {
 		background: var(--accent-hot);

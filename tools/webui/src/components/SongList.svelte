@@ -1,53 +1,8 @@
 <script lang="ts">
-	import { AudioLines, Library, ScanLine, Sparkles } from '@lucide/svelte';
-	import { app, toast } from '../lib/state.svelte.js';
-	import { putSong } from '../lib/db.js';
-	import { analyzeReferenceSong } from '../lib/reference.js';
+	import { AudioLines, Library, Sparkles } from '@lucide/svelte';
+	import { app } from '../lib/state.svelte.js';
 	import SongCard from './SongCard.svelte';
 	import LogCard from './LogCard.svelte';
-
-	let analyzingBatch = $state(false);
-	let batchTargets = $derived(
-		app.songs.filter((song) => song.source === 'upload' && song.analysisState !== 'ready').length
-	);
-
-	async function analyzeBatch() {
-		const targets = app.songs.filter(
-			(song) =>
-				song.source === 'upload' &&
-				song.analysisState !== 'ready' &&
-				song.analysisState !== 'analyzing'
-		);
-		if (targets.length === 0) {
-			toast('All reference songs already have a style profile.', 3200, true);
-			return;
-		}
-		analyzingBatch = true;
-		let completed = 0;
-		let failed = 0;
-		try {
-			for (const song of targets) {
-				try {
-					await analyzeReferenceSong(
-						song,
-						app.request.lm_model as string,
-						app.request.synth_model as string
-					);
-					if (song.id != null) await putSong($state.snapshot(song));
-					completed++;
-				} catch {
-					failed++;
-				}
-			}
-			toast(
-				`Finished: ${completed} analyzed${failed ? `, ${failed} could not be read` : ''}.`,
-				5000,
-				failed === 0
-			);
-		} finally {
-			analyzingBatch = false;
-		}
-	}
 </script>
 
 <div class="song-list">
@@ -65,18 +20,6 @@
 		<div class="library-toolbar">
 			<span><Sparkles size={13} /> Newest first</span>
 			<span>{app.songs.length} saved {app.songs.length === 1 ? 'song' : 'songs'}</span>
-			{#if batchTargets > 0}
-				<button
-					class="batch-analyze"
-					type="button"
-					disabled={analyzingBatch}
-					onclick={analyzeBatch}
-					title="Read every unprofiled reference song one at a time and save its style, lyrics, and song details"
-				>
-					<ScanLine size={13} />
-					{analyzingBatch ? 'Reading…' : `Read ${batchTargets} styles`}
-				</button>
-			{/if}
 		</div>
 		{#each app.songs as song (song.id)}
 			<SongCard {song} />
@@ -109,28 +52,6 @@
 	}
 	.library-toolbar span:first-child {
 		color: var(--accent);
-	}
-	.batch-analyze {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		margin-left: auto;
-		padding: 0.35rem 0.55rem;
-		border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
-		border-radius: 0.35rem;
-		background: rgba(240, 144, 64, 0.1);
-		color: var(--accent);
-		cursor: pointer;
-		font: inherit;
-		letter-spacing: 0.02em;
-		text-transform: none;
-	}
-	.batch-analyze:hover:not(:disabled) {
-		background: rgba(240, 144, 64, 0.18);
-	}
-	.batch-analyze:disabled {
-		cursor: wait;
-		opacity: 0.7;
 	}
 	.empty-library {
 		display: flex;

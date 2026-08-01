@@ -20,9 +20,28 @@ open_ui() {
     fi
 }
 
-if [ -f "${PID_FILE}" ] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
-    open_ui
-    exit 0
+supervisor_pid_is_ours() {
+    [ -f "${PID_FILE}" ] || return 1
+    local pid command
+    pid="$(cat "${PID_FILE}" 2>/dev/null || true)"
+    [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
+    kill -0 "${pid}" 2>/dev/null || return 1
+    command="$(tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null || true)"
+    [[ "${command}" == *"acestep-supervisor"* ]]
+}
+
+if supervisor_pid_is_ours; then
+    if curl --silent --fail --max-time 2 "${URL}/health" >/dev/null 2>&1; then
+        open_ui
+        exit 0
+    fi
+
+    # Do not keep opening a dead WebUI when an old supervisor is still alive
+    # but its package directory has been removed or upgraded. Reclaim its
+    # loopback control port before launching the current installation.
+    curl --silent --fail --max-time 2 -X POST "http://127.0.0.1:${CONTROL_PORT}/stop" >/dev/null 2>&1 || true
+    kill "$(cat "${PID_FILE}")" 2>/dev/null || true
+    find "${PID_FILE}" -maxdepth 0 -type f -delete
 fi
 
 if [ ! -x "${APP_DIR}/acestep-supervisor" ]; then
