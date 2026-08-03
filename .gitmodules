@@ -1,3 +1,6 @@
 [submodule "ggml"]
 	path = ggml
 	url = https://github.com/ServeurpersoCom/ggml.git
+[submodule "stable-diffusion.cpp"]
+	path = vendor/stable-diffusion.cpp
+	url = https://github.com/leejet/stable-diffusion.cpp.git

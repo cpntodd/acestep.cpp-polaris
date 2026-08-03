@@ -1,7 +1,9 @@
-# acestep.cpp
+# Polaris Studio
 
-Local AI music generation server with browser UI, powered by GGML.
-Describe a song, get stereo 48kHz audio. Runs on CPU, CUDA, Metal, Vulkan.
+Linux desktop workstation for local AI music generation, powered by GGML.
+Describe a song, get stereo 48kHz audio, and manage local models from the
+Polaris Studio application. The engine supports CPU, CUDA, HIP, and Vulkan
+backends where available.
 
 <img width="1704" height="773" alt="Light" src="https://github.com/user-attachments/assets/aeda150a-46a2-4542-a2d6-57d238a7bbb4" />
 <img width="1705" height="771" alt="Dark" src="https://github.com/user-attachments/assets/4941cec9-b6ff-4e09-8905-bdc3ee06d222" />
@@ -37,27 +39,11 @@ when it is present in the checkout.
 ## Build
 
 ```
-git clone --recurse-submodules https://github.com/cpntodd/acestep.cpp-polaris.git
-cd acestep.cpp-polaris
+git clone --recurse-submodules https://github.com/cpntodd/Polaris-Studio.git
+cd Polaris-Studio
 ```
 
-### Windows
-
-Pre-built binaries (until CI is set up): https://www.serveurperso.com/temp/acestep.cpp-win64/
-
-To build from source, install
-[Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-(select "Desktop development with C++" workload) and optionally the
-[CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) and/or the
-[Vulkan SDK](https://vulkan.lunarg.com/sdk/home).
-
-```cmd
-buildcuda.cmd     # NVIDIA GPU
-buildvulkan.cmd   # AMD/Intel GPU (Vulkan)
-buildall.cmd      # all backends (CUDA + Vulkan + CPU, runtime loading)
-```
-
-### Linux / macOS
+### Linux
 
 ```bash
 ./buildcuda.sh                   # NVIDIA GPU
@@ -67,13 +53,10 @@ buildall.cmd      # all backends (CUDA + Vulkan + CPU, runtime loading)
 NVCC_CCBIN=g++-13 ./buildcuda.sh # rolling release distros (Arch w/ GCC 16, etc.)
 ```
 
-macOS auto-enables Metal and Accelerate BLAS with any of the above.
-
 ## Run
 
 ```bash
-./server.sh       # Linux / macOS
-server.cmd        # Windows
+./server.sh
 ```
 
 Open http://localhost:8085 in your browser. The WebUI handles everything:
@@ -81,19 +64,18 @@ write a caption, set lyrics and metadata, generate, play, and download tracks.
 
 ### Debian desktop package
 
-On amd64 Debian or Ubuntu, the repository checkout can be packaged as a
-branded desktop application. The package embeds the built WebUI, native
-runtime, ggml backends, adapters, and every GGUF file currently in `models/`:
+On amd64 Debian or Ubuntu, the repository checkout can be packaged as the
+Polaris Studio desktop application. The package embeds the native Qt runtime,
+ggml backends, adapters, and every GGUF file currently in `models/`:
 
 ```bash
-./packaging/build-deb.sh
-sudo apt install ./dist/acestep-cpp_*.deb
+./packaging/build-polaris-deb.sh
+sudo apt install ./dist/polaris-studio_*.deb
 ```
 
-Launch **ACE-Step.cpp** from the application menu, or run `acestep-cpp`.
-The top-right retro **SERVER ON|OFF** switch controls the local backend. The
-package supervisor keeps that switch usable after a crash or an intentional
-stop; `acestep-cpp-stop` is also available as a terminal fallback.
+Launch **Polaris Studio** from the application menu, or run `polaris-studio`.
+The application manages the local engine through its private IPC channel and
+keeps model, library, telemetry, and generation controls in one desktop UI.
 
 The amd64 build uses Release optimizations, native CPU instructions, and the
 Vulkan backend when available. The RX 580 is selected automatically by the
@@ -113,7 +95,8 @@ encode. **Use style** copies the profile into Compose; **Source** and
 **Timbre** arm the same track for cover and timbre conditioning.
 
 Audio is not uploaded to a third-party service by the WebUI. It is sent only
-to the local `ace-server` when analysis or generation is explicitly started.
+to the local Polaris Studio engine when analysis or generation is explicitly
+started.
 
 When a reference includes vocals, the server first selects voice-active
 windows and runs the bundled multilingual Whisper listener over them. The
@@ -205,8 +188,8 @@ restart control.
 
 **GET /props** - Available models, server config, default parameters.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full API reference
-and AceRequest JSON specification.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full engine API
+reference and AceRequest JSON specification.
 
 </details>
 

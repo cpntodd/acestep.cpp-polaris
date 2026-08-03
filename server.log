@@ -1,0 +1,282 @@
+[Server] Scanning models in /mnt/Data/Projects/acestep.cpp/models
+[Registry] Qwen3-Embedding-0.6B-Q8_0.gguf -> Text-Enc
+[Registry] acestep-5Hz-lm-0.6B-Q8_0.gguf -> LM
+[Registry] acestep-5Hz-lm-4B-Q8_0.gguf -> LM
+[Registry] acestep-v15-turbo-Q4_K_M.gguf -> DiT
+[Registry] acestep-v15-turbo-Q8_0.gguf -> DiT
+[Registry] vae-BF16.gguf -> VAE
+[Store] Created (policy=STRICT)
+[Server] acestep.cpp fa33775 (2026-07-21)
+[Server] Listening on 127.0.0.1:8080
+[Server] Pipelines: /lm /synth /understand
+[Server] Models: 2 LM, 1 Text-Enc, 2 DiT, 1 VAE, 0 Adapter
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = AMD Radeon RX 580 Series (RADV POLARIS10) (radv) | uma: 0 | fp16: 0 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 65536 | int dot: 0 | matrix cores: none
+[MP3] Read buffer: 4311936 samples, 16000 Hz, 2 ch
+[Audio-Resample] 16000 Hz -> 48000 Hz, 4311936 samples...
+[Audio-Resample] Done: 4311936 -> 12935808 samples
+[Server] Understand source: 269.50s @ 48kHz
+[Server] Job bfbf721b820d40aa created (understand)
+[Understand-Load] Ready: lm=yes, fa=yes, fsm=yes
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/vae-BF16.gguf: 365 tensors, data at offset 30048
+[Load] VAE-Enc backend: Vulkan0 (CPU threads: 6)
+[VAE-Enc] Backend: Vulkan0, Weight buffer: 160.8 MB
+[VAE-Enc] Loaded: 5 blocks, downsample=1920x, F32 activations
+[Store] Load VAE-Enc: 937 ms
+[VAE-Enc] Tiled encode: 8 tiles (chunk=1966080, overlap=122880, stride=1720320 audio samples)
+[VAE-Enc] Graph: 491 nodes, T_audio=1843200
+[VAE-Enc] Downsample factor: 0.000521 (expected ~1/1920)
+[VAE-Enc] Graph: 491 nodes, T_audio=1966080
+[VAE-Enc] Graph: 491 nodes, T_audio=1016448
+[VAE-Enc] Tiled encode done: 8 tiles -> T_latent=6737 (269.50s @ 48kHz)
+[Store] Unload VAE-Enc (160.8 MB)
+[Understand-VAE] Encoded: 6737 latent frames (269.48s), 147482ms
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/acestep-v15-turbo-Q8_0.gguf: 678 tensors, data at offset 56864
+[Load] Tokenizer backend: Vulkan0 (CPU threads: 6)
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/acestep-v15-turbo-Q8_0.gguf: 678 tensors, data at offset 56864
+[WeightCtx] Loaded 30 tensors, 106.5 MB into backend
+[Tok] Loaded: 2 layers, H=2048, pool_window=5
+[Store] Load FSQ-Tok: 238 ms
+[Tok] Tokenized: 6737 frames -> 1348 codes (269.6s @ 5Hz)
+[Store] Unload FSQ-Tok (106.5 MB)
+[Understand-Tok] 1348 codes (269.60s @ 5Hz), 3057ms
+[Load] LM backend: Vulkan0 (CPU threads: 6)
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/acestep-5Hz-lm-4B-Q8_0.gguf: 398 tensors, data at offset 5346304
+[LM-Config] 36L, H=2560, V=217204, Nh=32, Nkv=8, D=128, tied=1
+[Qwen3] Attn: Q+K+V fused
+[Qwen3] MLP: gate+up fused
+[WeightCtx] Loaded 398 tensors, 4245.7 MB into backend
+[LM-KV] Allocated 2 sets x 36 layers (4D batched), 2304.0 MB
+[Store] Load LM: 5456 ms
+[BPE] Loaded from GGUF: 151643 vocab, 151387 merges
+[FSM] Prefix trees: bpm=301, dur=601, key=106, lang=53, tsig=5 nodes
+[Understand-Prompt] 1378 tokens (1348 codes + framing)
+[Understand-Prefill] 3680ms, 1378 tokens, seed=1837925859
+[Understand-Decode] 522 tokens, 19896ms (26.2 tok/s)
+[Understand-Result] bpm: 83
+[Understand-Result] duration: 282s
+[Understand-Result] keyscale: E minor
+[Understand-Result] timesig: 4
+[Understand-Result] language: sr
+[Understand-Result] caption: An epic, cinematic intro opens with a mournful, wailing duduk-like synth melody ...
+[Understand-Result] lyrics: 785 chars
+[Understand-Result] audio_codes: 1348 codes
+[Understand] Total 176005ms | seed=1837925859
+[Store] Unload LM (4245.7 MB)
+[Server] Job bfbf721b820d40aa done (understand)
+[MP3] Read buffer: 5150592 samples, 32000 Hz, 2 ch
+[Audio-Resample] 32000 Hz -> 48000 Hz, 5150592 samples...
+[Audio-Resample] Done: 5150592 -> 7725888 samples
+[Server] Understand source: 160.96s @ 48kHz
+[Server] Job be6d5eca75d2bebd created (understand)
+[Understand-Load] Ready: lm=yes, fa=yes, fsm=yes
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/vae-BF16.gguf: 365 tensors, data at offset 30048
+[Load] VAE-Enc backend: Vulkan0 (CPU threads: 6)
+[VAE-Enc] Backend: Vulkan0, Weight buffer: 160.8 MB
+[VAE-Enc] Loaded: 5 blocks, downsample=1920x, F32 activations
+[Store] Load VAE-Enc: 16757 ms
+[VAE-Enc] Tiled encode: 5 tiles (chunk=1966080, overlap=122880, stride=1720320 audio samples)
+[VAE-Enc] Graph: 491 nodes, T_audio=1843200
+[VAE-Enc] Downsample factor: 0.000521 (expected ~1/1920)
+[VAE-Enc] Graph: 491 nodes, T_audio=1966080
+[VAE-Enc] Graph: 491 nodes, T_audio=967488
+[VAE-Enc] Tiled encode done: 5 tiles -> T_latent=4023 (160.96s @ 48kHz)
+[Store] Unload VAE-Enc (160.8 MB)
+[Understand-VAE] Encoded: 4023 latent frames (160.92s), 90044ms
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/acestep-v15-turbo-Q4_K_M.gguf: 678 tensors, data at offset 56864
+[Load] Tokenizer backend: Vulkan0 (CPU threads: 6)
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/acestep-v15-turbo-Q4_K_M.gguf: 678 tensors, data at offset 56864
+[WeightCtx] Loaded 30 tensors, 64.8 MB into backend
+[Tok] Loaded: 2 layers, H=2048, pool_window=5
+[Store] Load FSQ-Tok: 1671 ms
+[Tok] Tokenized: 4023 frames -> 805 codes (161.0s @ 5Hz)
+[Store] Unload FSQ-Tok (64.8 MB)
+[Understand-Tok] 805 codes (161.00s @ 5Hz), 3942ms
+[Load] LM backend: Vulkan0 (CPU threads: 6)
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/acestep-5Hz-lm-0.6B-Q8_0.gguf: 310 tensors, data at offset 5339520
+[LM-Config] 28L, H=1024, V=217204, Nh=16, Nkv=8, D=128, tied=1
+[Qwen3] Attn: Q+K+V fused
+[Qwen3] MLP: gate+up fused
+[WeightCtx] Loaded 310 tensors, 671.9 MB into backend
+[LM-KV] Allocated 2 sets x 28 layers (4D batched), 1792.0 MB
+[Store] Load LM: 5747 ms
+[BPE] Loaded from GGUF: 151643 vocab, 151387 merges
+[FSM] Prefix trees: bpm=301, dur=601, key=106, lang=53, tsig=5 nodes
+[Understand-Prompt] 835 tokens (805 codes + framing)
+[Understand-Prefill] 380ms, 835 tokens, seed=133933630
+[Understand-Decode] 505 tokens, 5509ms (91.7 tok/s)
+[Understand-Result] bpm: 143
+[Understand-Result] duration: 162s
+[Understand-Result] keyscale: B♭ minor
+[Understand-Result] timesig: 4
+[Understand-Result] language: sa
+[Understand-Result] caption: A devotional Indian classical piece opens with an emotive, highly ornamented vio...
+[Understand-Result] lyrics: 762 chars
+[Understand-Result] audio_codes: 805 codes
+[Understand] Total 105476ms | seed=133933630
+[Store] Unload LM (671.9 MB)
+[Server] Job be6d5eca75d2bebd done (understand)
+[MP3] Read buffer: 2457792 samples, 16000 Hz, 2 ch
+[Audio-Resample] 16000 Hz -> 48000 Hz, 2457792 samples...
+[Audio-Resample] Done: 2457792 -> 7373376 samples
+[Server] Understand source: 153.61s @ 48kHz
+[Server] Job 0fa99679512d64ff created (understand)
+[Understand-Load] Ready: lm=yes, fa=yes, fsm=yes
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/vae-BF16.gguf: 365 tensors, data at offset 30048
+[Load] VAE-Enc backend: Vulkan0 (CPU threads: 6)
+[VAE-Enc] Backend: Vulkan0, Weight buffer: 160.8 MB
+[VAE-Enc] Loaded: 5 blocks, downsample=1920x, F32 activations
+[Store] Load VAE-Enc: 948 ms
+[VAE-Enc] Tiled encode: 5 tiles (chunk=1966080, overlap=122880, stride=1720320 audio samples)
+[VAE-Enc] Graph: 491 nodes, T_audio=1843200
+[VAE-Enc] Downsample factor: 0.000521 (expected ~1/1920)
+[VAE-Enc] Graph: 491 nodes, T_audio=1966080
+[VAE-Enc] Graph: 491 nodes, T_audio=614976
+[VAE-Enc] Tiled encode done: 5 tiles -> T_latent=3840 (153.61s @ 48kHz)
+[Store] Unload VAE-Enc (160.8 MB)
+[Understand-VAE] Encoded: 3840 latent frames (153.60s), 73363ms
+[Load] Tokenizer backend: Vulkan0 (CPU threads: 6)
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/acestep-v15-turbo-Q4_K_M.gguf: 678 tensors, data at offset 56864
+[WeightCtx] Loaded 30 tensors, 64.8 MB into backend
+[Tok] Loaded: 2 layers, H=2048, pool_window=5
+[Store] Load FSQ-Tok: 38 ms
+[Tok] Tokenized: 3840 frames -> 768 codes (153.6s @ 5Hz)
+[Store] Unload FSQ-Tok (64.8 MB)
+[Understand-Tok] 768 codes (153.60s @ 5Hz), 1650ms
+[Load] LM backend: Vulkan0 (CPU threads: 6)
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/acestep-5Hz-lm-0.6B-Q8_0.gguf: 310 tensors, data at offset 5339520
+[LM-Config] 28L, H=1024, V=217204, Nh=16, Nkv=8, D=128, tied=1
+[Qwen3] Attn: Q+K+V fused
+[Qwen3] MLP: gate+up fused
+[WeightCtx] Loaded 310 tensors, 671.9 MB into backend
+[LM-KV] Allocated 2 sets x 28 layers (4D batched), 1792.0 MB
+[Store] Load LM: 437 ms
+[Understand-Prompt] 798 tokens (768 codes + framing)
+[Understand-Prefill] 344ms, 798 tokens, seed=1659841431
+[Understand-Decode] 187 tokens, 2308ms (81.0 tok/s)
+[Understand-Result] bpm: 188
+[Understand-Result] duration: 154s
+[Understand-Result] keyscale: C minor
+[Understand-Result] timesig: 3
+[Understand-Result] language: zxx
+[Understand-Result] caption: An emotive and virtuosic instrumental piece led by a bowed string instrument, li...
+[Understand-Result] lyrics: 14 chars
+[Understand-Result] audio_codes: 768 codes
+[Understand] Total 77758ms | seed=1659841431
+[Store] Unload LM (671.9 MB)
+[Server] Job 0fa99679512d64ff done (understand)
+[MP3] Read buffer: 2457792 samples, 16000 Hz, 2 ch
+[Audio-Resample] 16000 Hz -> 48000 Hz, 2457792 samples...
+[Audio-Resample] Done: 2457792 -> 7373376 samples
+[Server] Understand source: 153.61s @ 48kHz
+[Server] Job 565e1fcbed8f9dba created (understand)
+[Understand-Load] Ready: lm=yes, fa=yes, fsm=yes
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/vae-BF16.gguf: 365 tensors, data at offset 30048
+[Load] VAE-Enc backend: Vulkan0 (CPU threads: 6)
+[VAE-Enc] Backend: Vulkan0, Weight buffer: 160.8 MB
+[VAE-Enc] Loaded: 5 blocks, downsample=1920x, F32 activations
+[Store] Load VAE-Enc: 915 ms
+[VAE-Enc] Tiled encode: 5 tiles (chunk=1966080, overlap=122880, stride=1720320 audio samples)
+[VAE-Enc] Graph: 491 nodes, T_audio=1843200
+[VAE-Enc] Downsample factor: 0.000521 (expected ~1/1920)
+[VAE-Enc] Graph: 491 nodes, T_audio=1966080
+[VAE-Enc] Graph: 491 nodes, T_audio=614976
+[VAE-Enc] Tiled encode done: 5 tiles -> T_latent=3840 (153.61s @ 48kHz)
+[Store] Unload VAE-Enc (160.8 MB)
+[Understand-VAE] Encoded: 3840 latent frames (153.60s), 72858ms
+[Load] Tokenizer backend: Vulkan0 (CPU threads: 6)
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/acestep-v15-turbo-Q4_K_M.gguf: 678 tensors, data at offset 56864
+[WeightCtx] Loaded 30 tensors, 64.8 MB into backend
+[Tok] Loaded: 2 layers, H=2048, pool_window=5
+[Store] Load FSQ-Tok: 37 ms
+[Tok] Tokenized: 3840 frames -> 768 codes (153.6s @ 5Hz)
+[Store] Unload FSQ-Tok (64.8 MB)
+[Understand-Tok] 768 codes (153.60s @ 5Hz), 1543ms
+[Load] LM backend: Vulkan0 (CPU threads: 6)
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/acestep-5Hz-lm-0.6B-Q8_0.gguf: 310 tensors, data at offset 5339520
+[LM-Config] 28L, H=1024, V=217204, Nh=16, Nkv=8, D=128, tied=1
+[Qwen3] Attn: Q+K+V fused
+[Qwen3] MLP: gate+up fused
+[WeightCtx] Loaded 310 tensors, 671.9 MB into backend
+[LM-KV] Allocated 2 sets x 28 layers (4D batched), 1792.0 MB
+[Store] Load LM: 447 ms
+[Understand-Prompt] 798 tokens (768 codes + framing)
+[Understand-Prefill] 344ms, 798 tokens, seed=1364922213
+[Understand-Decode] 181 tokens, 2164ms (83.6 tok/s)
+[Understand-Result] bpm: 188
+[Understand-Result] duration: 150s
+[Understand-Result] keyscale: C minor
+[Understand-Result] timesig: 3
+[Understand-Result] language: zxx
+[Understand-Result] caption: An expressive and virtuosic instrumental piece centered on a lead woodwind instr...
+[Understand-Result] lyrics: 14 chars
+[Understand-Result] audio_codes: 768 codes
+[Understand] Total 77012ms | seed=1364922213
+[Store] Unload LM (671.9 MB)
+[Server] Job 565e1fcbed8f9dba done (understand)
+[MP3] Read buffer: 2535552 samples, 16000 Hz, 2 ch
+[Audio-Resample] 16000 Hz -> 48000 Hz, 2535552 samples...
+[Audio-Resample] Done: 2535552 -> 7606656 samples
+[Server] Understand source: 158.47s @ 48kHz
+[Server] Job 48ea39f3419f132e created (understand)
+[Understand-Load] Ready: lm=yes, fa=yes, fsm=yes
+[GGUF] /mnt/Data/Projects/acestep.cpp/models/vae-BF16.gguf: 365 tensors, data at offset 30048
+[Load] VAE-Enc backend: Vulkan0 (CPU threads: 6)
+[VAE-Enc] Backend: Vulkan0, Weight buffer: 160.8 MB
+[VAE-Enc] Loaded: 5 blocks, downsample=1920x, F32 activations
+[Store] Load VAE-Enc: 748 ms
+[VAE-Enc] Tiled encode: 5 tiles (chunk=1966080, overlap=122880, stride=1720320 audio samples)
+[VAE-Enc] Graph: 491 nodes, T_audio=1843200
+[VAE-Enc] Downsample factor: 0.000521 (expected ~1/1920)
+[VAE-Enc] Graph: 491 nodes, T_audio=1966080
+[Supervisor] control listening on 127.0.0.1:8081
+[Server] Scanning models in /mnt/Data/Projects/acestep.cpp/models
+[Registry] Qwen3-Embedding-0.6B-Q8_0.gguf -> Text-Enc
+[Registry] acestep-5Hz-lm-0.6B-Q8_0.gguf -> LM
+[Registry] acestep-5Hz-lm-4B-Q8_0.gguf -> LM
+[Registry] acestep-v15-turbo-Q4_K_M.gguf -> DiT
+[Registry] acestep-v15-turbo-Q8_0.gguf -> DiT
+[Registry] vae-BF16.gguf -> VAE
+[Server] Scanning adapters in /mnt/Data/Projects/acestep.cpp/adapters
+[Store] Created (policy=STRICT)
+[Server] acestep.cpp 73ab8c7 (2026-08-01)
+[Server] Listening on 127.0.0.1:8080
+[Server] Pipelines: /lm /synth /understand
+[Server] Models: 2 LM, 1 Text-Enc, 2 DiT, 1 VAE, 0 Adapter
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = AMD Radeon RX 580 Series (RADV POLARIS10) (radv) | uma: 0 | fp16: 0 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 65536 | int dot: 0 | matrix cores: none
+[Supervisor] control listening on 127.0.0.1:8081
+[Server] Scanning models in /mnt/Data/Projects/acestep.cpp/models
+[Registry] Qwen3-Embedding-0.6B-Q8_0.gguf -> Text-Enc
+[Registry] acestep-5Hz-lm-0.6B-Q8_0.gguf -> LM
+[Registry] acestep-5Hz-lm-4B-Q8_0.gguf -> LM
+[Registry] acestep-v15-turbo-Q4_K_M.gguf -> DiT
+[Registry] acestep-v15-turbo-Q8_0.gguf -> DiT
+[Registry] vae-BF16.gguf -> VAE
+[Server] Scanning adapters in /mnt/Data/Projects/acestep.cpp/adapters
+[Store] Created (policy=STRICT)
+[Server] acestep.cpp 73ab8c7 (2026-08-01)
+[Server] Listening on 127.0.0.1:8080
+[Server] Pipelines: /lm /synth /understand
+[Server] Models: 2 LM, 1 Text-Enc, 2 DiT, 1 VAE, 0 Adapter
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = AMD Radeon RX 580 Series (RADV POLARIS10) (radv) | uma: 0 | fp16: 0 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 65536 | int dot: 0 | matrix cores: none
+[Supervisor] control listening on 127.0.0.1:8081
+[Server] Speech language ID: /mnt/Data/Projects/acestep.cpp/models/ggml-large-v3-turbo-q5_0.bin (backend=CPU/GGML (default))
+[Server] Scanning models in /mnt/Data/Projects/acestep.cpp/models
+[Registry] Qwen3-Embedding-0.6B-Q8_0.gguf -> Text-Enc
+[Registry] acestep-5Hz-lm-0.6B-Q8_0.gguf -> LM
+[Registry] acestep-5Hz-lm-4B-Q8_0.gguf -> LM
+[Registry] acestep-v15-turbo-Q4_K_M.gguf -> DiT
+[Registry] acestep-v15-turbo-Q8_0.gguf -> DiT
+[Registry] vae-BF16.gguf -> VAE
+[Server] Scanning adapters in /mnt/Data/Projects/acestep.cpp/adapters
+[Store] Created (policy=STRICT)
+[Server] acestep.cpp 5d41cb7 (2026-08-01)
+[Server] Listening on 127.0.0.1:8080
+[Server] Pipelines: /lm /synth /understand
+[Server] Models: 2 LM, 1 Text-Enc, 2 DiT, 1 VAE, 0 Adapter
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = AMD Radeon RX 580 Series (RADV POLARIS10) (radv) | uma: 0 | fp16: 0 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 65536 | int dot: 0 | matrix cores: none
+[Server] Shutting down...
+[Server] Done

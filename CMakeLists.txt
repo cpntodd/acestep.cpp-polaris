@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.14)
 project(acestep-ggml LANGUAGES C CXX)
 
+# Polaris Studio is a native Linux desktop application. Platform-specific
+# compatibility code retained in vendored libraries is not part of the Linux
+# build or Debian package, and unsupported host builds should fail explicitly.
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR "Polaris Studio supports Linux only")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -177,10 +184,71 @@ add_custom_command(
 set_source_files_properties(${WEBUI_OUTPUT} PROPERTIES GENERATED TRUE)
 
 # ace-server: HTTP server (LM + synth endpoints + embedded webui)
-add_executable(ace-server tools/ace-server.cpp tools/system-metrics.cpp ${WEBUI_OUTPUT})
-target_include_directories(ace-server PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+add_executable(ace-server tools/ace-server.cpp src/server-engine.cpp tools/system-metrics.cpp ${WEBUI_OUTPUT})
+target_include_directories(ace-server PRIVATE ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/tools)
 target_link_libraries(ace-server PRIVATE acestep-core acestep-language-id httplib)
 link_ggml_backends(ace-server)
+
+# polaris-engine: IPC worker for the Polaris Studio desktop app.
+# Shares the engine core (server-engine.cpp) with ace-server but uses a
+# Unix domain socket + JSON-RPC instead of HTTP. No webview/httplib dep.
+add_executable(polaris-engine
+    tools/polaris-engine.cpp
+    src/server-engine.cpp
+    tools/system-metrics.cpp
+)
+target_include_directories(polaris-engine PRIVATE ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/tools)
+target_link_libraries(polaris-engine PRIVATE acestep-core acestep-language-id)
+link_ggml_backends(polaris-engine)
+add_dependencies(polaris-engine version)
+
+# Optional bundled stable-diffusion.cpp runtime used by Polaris Studio's
+# Pixel Lab. It is built as an isolated ExternalProject because upstream
+# brings its own ggml revision; this avoids target/name conflicts with the
+# ACE-Step ggml tree while producing a self-contained sd-cli binary.
+option(POLARIS_BUNDLED_SD "Build the bundled stable-diffusion.cpp sd-cli runtime" ON)
+if(POLARIS_BUNDLED_SD AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/stable-diffusion.cpp/CMakeLists.txt")
+    include(ExternalProject)
+
+    set(POLARIS_SD_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/stable-diffusion.cpp")
+    set(POLARIS_SD_BINARY_DIR "${CMAKE_BINARY_DIR}/stable-diffusion.cpp")
+    set(POLARIS_SD_BIN_DIR "${POLARIS_SD_BINARY_DIR}/bin")
+    set(POLARIS_SD_CLI_PATH "${POLARIS_SD_BIN_DIR}/sd-cli")
+
+    if(GGML_VULKAN)
+        set(POLARIS_SD_VULKAN ON)
+    else()
+        set(POLARIS_SD_VULKAN OFF)
+    endif()
+
+    ExternalProject_Add(polaris-sd-runtime
+        SOURCE_DIR "${POLARIS_SD_SOURCE_DIR}"
+        BINARY_DIR "${POLARIS_SD_BINARY_DIR}"
+        CMAKE_ARGS
+            -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+            -DSD_BUILD_EXAMPLES=ON
+            -DSD_BUILD_SHARED_LIBS=OFF
+            -DSD_WEBP=OFF
+            -DSD_WEBM=OFF
+            -DSD_VULKAN=${POLARIS_SD_VULKAN}
+            -DSD_CUDA=OFF
+            -DSD_METAL=OFF
+            -DSD_OPENCL=OFF
+            -DSD_SYCL=OFF
+            -DGGML_CCACHE=OFF
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target sd-cli --config ${CMAKE_BUILD_TYPE} --parallel
+        INSTALL_COMMAND ""
+        BUILD_BYPRODUCTS "${POLARIS_SD_CLI_PATH}"
+        UPDATE_COMMAND ""
+        TEST_COMMAND ""
+    )
+
+    add_custom_target(polaris-sd-cli ALL DEPENDS polaris-sd-runtime)
+    set(POLARIS_SD_CLI_PATH "${POLARIS_SD_CLI_PATH}")
+else()
+    message(WARNING "Bundled stable-diffusion.cpp source is unavailable; Pixel Lab will require an external sd-cli.")
+endif()
 
 # Local process supervisor used by the packaged desktop launcher. It keeps a
 # tiny control endpoint alive while ace-server is stopped, allowing the WebUI
@@ -220,5 +288,11 @@ else()
     target_link_libraries(mp3-codec PRIVATE m)
 endif()
 target_link_libraries(mp3-codec PRIVATE Threads::Threads)
+
+# Optional Polaris Studio Qt 6 desktop application
+option(POLARIS_STUDIO "Build the Polaris Studio Qt 6 desktop app" ON)
+if(POLARIS_STUDIO)
+    add_subdirectory(app)
+endif()
 
 add_subdirectory(tests)

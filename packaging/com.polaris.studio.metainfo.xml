@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+    <id>com.polaris.studio</id>
+    <metadata_license>MIT</metadata_license>
+    <project_license>MIT</project_license>
+    <name>Polaris Studio</name>
+    <summary>Local AI music and pixel-art generation workstation</summary>
+    <description>
+        <p>
+            Polaris Studio is a private, offline AI music and image-generation
+            desktop application powered by GGML. Describe a song or create a
+            detailed pixel-art asset for a local game project. Runs entirely
+            on your local machine — no cloud, no subscription, no browser.
+        </p>
+        <p>
+            Features a native Qt 6 desktop interface with library management,
+            reference-song analysis, Pixel Lab, model downloader, and system
+            resource monitoring. Audio and image runtimes use Vulkan for GPU
+            acceleration when available.
+        </p>
+    </description>
+    <url type="homepage">https://github.com/cpntodd/Polaris-Studio</url>
+    <screenshots>
+        <screenshot type="default">
+            <caption>Polaris Studio dashboard</caption>
+        </screenshot>
+    </screenshots>
+    <provides>
+        <binary>polaris-studio</binary>
+    </provides>
+    <releases>
+        <release version="0.1.7" date="2026-08-03">
+            <description>
+                <p>Adds proportional maximized-window scaling and removes obsolete Windows launch scripts from the Linux-only project.</p>
+            </description>
+        </release>
+        <release version="0.1.6" date="2026-08-03">
+            <description>
+                <p>Adds independent 250 ms host and AMD GPU telemetry, four grouped gauges, smooth instrument-style needles, and responsive compact-window scaling.</p>
+            </description>
+        </release>
+        <release version="0.1.5" date="2026-08-03">
+            <description><p>Fixed the IPC connection lifecycle so the local server transitions from booting to running.</p></description>
+        </release>
+    </releases>
+    <content_rating type="oars-1.1"/>
+</component>

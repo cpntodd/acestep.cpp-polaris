@@ -1,11 +1,13 @@
-# Architecture
+# Polaris Studio Architecture
 
-> Full technical reference for acestep.cpp. For a quick start guide, see [README.md](../README.md).
+> Full technical reference for the Polaris Studio engine and native desktop
+> application. For a quick start guide, see [README.md](../README.md).
 
-# acestep.cpp
+# Engine overview
 
-Portable C++17 implementation of ACE-Step 1.5 music generation using GGML.
-Text + lyrics in, stereo 48kHz MP3 or WAV out. Runs on CPU, CUDA, ROCm, Metal, Vulkan.
+Polaris Studio contains a C++17 implementation of ACE-Step 1.5 music
+generation using GGML. Text and lyrics in, stereo 48kHz MP3 or WAV out. The
+Linux build supports CPU, CUDA, ROCm, and Vulkan backends where available.
 
 ## Build
 
@@ -13,9 +15,6 @@ Text + lyrics in, stereo 48kHz MP3 or WAV out. Runs on CPU, CUDA, ROCm, Metal, V
 git submodule update --init
 
 mkdir build && cd build
-
-# macOS (Metal + Accelerate BLAS auto-enabled)
-cmake ..
 
 # Linux with NVIDIA GPU
 cmake .. -DGGML_CUDA=ON
@@ -27,33 +26,6 @@ cmake .. -DGGML_HIP=ON
 cmake .. -DGGML_VULKAN=ON
 
 cmake --build . --config Release -j$(nproc)
-```
-
-### Windows
-
-Install [Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-(select "Desktop development with C++" workload) and optionally the
-[CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) and/or the
-[Vulkan SDK](https://vulkan.lunarg.com/sdk/home).
-
-```cmd
-git submodule update --init
-
-call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-
-mkdir build
-cd build
-
-rem NVIDIA GPU
-cmake .. -DGGML_CUDA=ON
-
-rem AMD/Intel GPU (Vulkan)
-cmake .. -DGGML_VULKAN=ON
-
-rem all backends (CUDA + Vulkan + CPU, runtime loading)
-cmake .. -DGGML_CPU_ALL_VARIANTS=ON -DGGML_CUDA=ON -DGGML_VULKAN=ON -DGGML_BACKEND_DL=ON
-
-cmake --build . --config Release -j %NUMBER_OF_PROCESSORS%
 ```
 
 Builds seven binaries: `ace-lm` (LLM), `ace-synth` (DiT + VAE), `ace-server` (HTTP server), `ace-understand` (reverse: audio -> metadata), `neural-codec` (VAE encode/decode), `mp3-codec` (MP3 encoder/decoder) and `quantize` (GGUF requantizer).

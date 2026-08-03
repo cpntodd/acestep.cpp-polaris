@@ -12,7 +12,8 @@ auto detected from the safetensors payload.
 LyCORIS LoKr handles factorized (`lokr_w2_a` + `lokr_w2_b`) or monolithic
 (`lokr_w2`) weights, with optional DoRA via `dora_scale`.
 
-Point the server at this folder:
+Point the Polaris Studio engine at this folder when using the command-line
+server:
 
 ```bash
 ./build/ace-server --models ./models --adapters ./adapters

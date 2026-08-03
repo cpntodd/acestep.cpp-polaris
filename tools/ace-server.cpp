@@ -56,6 +56,8 @@
 #    pragma GCC diagnostic pop
 #endif
 
+#include "server-engine.h"
+
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -135,292 +137,28 @@ static void fd_close(int fd) {
 }
 #endif
 
-// server instance pointer for the signal handler
+// align with types from server-engine.h (EngineJob = Job, etc.)
+using Job       = EngineJob;
+using JobStatus = EngineJobStatus;
+
+// Compatibility: old local names → shared engine names
+#define mtx_jobs          g_mtx_jobs
+#define mtx_work          g_mtx_work
+#define cv_work           g_cv_work
+#define MAX_T_LATENT      POLARIS_MAX_T_LATENT
+#define LATENT_CHANNELS    POLARIS_LATENT_CHANNELS
+#define LATENT_FRAME_BYTES POLARIS_LATENT_FRAME_BYTES
+#define MAX_JOBS          POLARIS_MAX_JOBS
+
+// HTTP-only globals (not shared with IPC engine)
 static httplib::Server * g_svr = nullptr;
 
 static void on_signal(int) {
-    if (g_svr) {
-        g_svr->stop();
-    }
-}
-
-// work queue: all GPU jobs go through a single FIFO queue processed
-// by one worker thread. GPU access is serialized by construction.
-static std::deque<std::function<void()>> g_work_queue;
-static std::mutex                        mtx_work;
-static std::condition_variable           cv_work;
-static bool                              g_work_stop = false;
-
-static void work_push(std::function<void()> fn) {
-    std::lock_guard<std::mutex> lock(mtx_work);
-    g_work_queue.push_back(std::move(fn));
-    cv_work.notify_one();
-}
-
-// worker thread: consume jobs in FIFO order until shutdown.
-// on stop: finishes the current job, discards pending ones.
-static void worker_main() {
-    for (;;) {
-        std::function<void()> fn;
-        {
-            std::unique_lock<std::mutex> lock(mtx_work);
-            cv_work.wait(lock, [] { return g_work_stop || !g_work_queue.empty(); });
-            if (g_work_stop) {
-                break;
-            }
-            fn = std::move(g_work_queue.front());
-            g_work_queue.pop_front();
-        }
-        fn();
-    }
-}
-
-// central GGML module store shared across pipelines. Policy picked at startup
-// from --keep-loaded: STRICT by default (one GPU module resident at a time),
-// NEVER when the flag is set (accumulate across requests).
-static ModelStore * g_store = nullptr;
-
-// model registry (populated at startup from GGUF metadata)
-static ModelRegistry g_registry;
-
-// Dedicated local language recognizer. It is lazy-loaded on the first
-// raw-audio understand request so server startup stays fast, then reused for
-// the local reference library. CPU is the safe default; --language-gpu or
-// ACESTEP_LANGUAGE_GPU=1 opts into the shared Vulkan device. Cached-latent
-// requests still carry their original audio when the WebUI wants language ID.
-static std::string            g_language_model_path;
-static AceLanguageIdentifier *g_language_identifier = nullptr;
-static bool                   g_language_id_attempted = false;
-static bool                   g_language_use_gpu = false;
-
-// loaded model names (empty = nothing loaded)
-static std::string g_loaded_lm;
-static std::string g_loaded_dit;
-static std::string g_loaded_adapter;
-static float       g_loaded_adapter_scale = 1.0f;
-static std::string g_loaded_und_dit;
-static std::string g_loaded_vae;
-
-// pipeline params (rebuilt from registry paths on each load)
-static AceLmParams         g_lm_params;
-static AceSynthParams      g_synth_params;
-static AceUnderstandParams g_und_params;
-
-// limits
-static int  g_max_batch   = 1;
-static bool g_keep_loaded = false;
-
-static bool file_exists(const std::string & path) {
-    FILE * f = fopen(path.c_str(), "rb");
-    if (!f) return false;
-    fclose(f);
-    return true;
-}
-
-static std::string find_language_model(const char * models_dir) {
-    if (!models_dir) return "";
-    static const char * candidates[] = {
-        "ggml-large-v3-turbo-q5_0.bin",
-        "ggml-large-v3-turbo.bin",
-        "ggml-medium.bin",
-        "ggml-small.bin",
-    };
-    for (const char * candidate : candidates) {
-        std::string path = std::string(models_dir) + "/" + candidate;
-        if (file_exists(path)) return path;
-    }
-    return "";
-}
-
-// job system: all compute endpoints create a job and return its ID
-// immediately. the worker thread processes jobs in FIFO order, stores
-// the result. the client polls GET /job?id=N until done, then fetches
-// the result with GET /job?id=N&result=1.
-// cancel: POST /job?id=N&cancel=1 sets the per-job flag.
-enum class JobStatus : int {
-    RUNNING   = 0,
-    DONE      = 1,
-    FAILED    = 2,
-    CANCELLED = 3,
-};
-
-struct Job {
-    std::string            id;
-    std::atomic<JobStatus> status{ JobStatus::RUNNING };
-    std::string            result_body;
-    std::string            result_mime;
-    std::atomic<bool>      cancel{ false };
-
-    // memory ordering contract: result_body and result_mime are written
-    // before status is stored (seq_cst). the client loads status (seq_cst)
-    // and only reads result fields after seeing done/failed. this guarantees
-    // visibility without an explicit mutex on the result fields.
-};
-
-static std::mutex                                            mtx_jobs;
-static std::unordered_map<std::string, std::shared_ptr<Job>> g_jobs;
-static std::deque<std::string>                               g_job_order;
-static const int                                             MAX_JOBS = 32;
-
-// Source latent cap: matches the silence_latent tensor baked into the DiT
-// GGUF, which is fixed at [15000, 64] f32. The pipeline indexes into it
-// directly when padding context, so any T_latent above 15000 would walk
-// past the buffer. Same hard limit ops_resolve_T enforces on s.T.
-static const int MAX_T_LATENT = 15000;
-
-// Latent payload format: raw f32 [T * 64] little-endian, no header. Same
-// layout neural-codec emits in --encode -f f32 mode and what /synth,
-// /understand, /vae return as the latent multipart part or raw body.
-static const int LATENT_CHANNELS    = 64;
-static const int LATENT_FRAME_BYTES = LATENT_CHANNELS * (int) sizeof(float);
-
-// Validate a latent payload coming from the wire: size must be a strict
-// multiple of one frame, T must be in (0, MAX_T_LATENT]. Returns the frame
-// count or -1 on failure (with the HTTP code the caller should reply).
-static int latent_payload_validate(size_t size, int * http_code_out) {
-    if (size == 0 || (size % LATENT_FRAME_BYTES) != 0) {
-        if (http_code_out) {
-            *http_code_out = 400;
-        }
-        return -1;
-    }
-    int T = (int) (size / (size_t) LATENT_FRAME_BYTES);
-    if (T <= 0) {
-        if (http_code_out) {
-            *http_code_out = 400;
-        }
-        return -1;
-    }
-    if (T > MAX_T_LATENT) {
-        if (http_code_out) {
-            *http_code_out = 413;
-        }
-        return -1;
-    }
-    return T;
-}
-
-// Build a multipart/mixed body that bundles the primary payload with its
-// latents. The audio variant pairs one audio part with one latent part per
-// track, the JSON variant carries a single payload and one optional latent.
-// The boundary is fixed and matches the existing batch format; the client
-// splits on it the same way for every endpoint.
-static const char * MULTIPART_BOUNDARY = "ace-batch-boundary";
-
-static std::string multipart_build_audio_latent(const std::vector<std::string> &        audio_parts,
-                                                const char *                            audio_mime,
-                                                const std::vector<std::vector<float>> & latents) {
-    std::string body;
-    for (size_t i = 0; i < audio_parts.size(); i++) {
-        if (audio_parts[i].empty()) {
-            continue;
-        }
-        body += "--";
-        body += MULTIPART_BOUNDARY;
-        body += "\r\nContent-Type: ";
-        body += audio_mime;
-        body += "\r\n\r\n";
-        body += audio_parts[i];
-        body += "\r\n";
-        body += "--";
-        body += MULTIPART_BOUNDARY;
-        body += "\r\nContent-Type: application/octet-stream\r\n";
-        body += "Content-Disposition: form-data; name=\"latent\"\r\n\r\n";
-        body.append(reinterpret_cast<const char *>(latents[i].data()), latents[i].size() * sizeof(float));
-        body += "\r\n";
-    }
-    body += "--";
-    body += MULTIPART_BOUNDARY;
-    body += "--\r\n";
-    return body;
-}
-
-// Same shape, JSON primary instead of audio. Used by /understand.
-static std::string multipart_build_json_latent(const std::string &        json_part,
-                                               const std::vector<float> & latent,
-                                               int                        T_latent) {
-    std::string body;
-    body += "--";
-    body += MULTIPART_BOUNDARY;
-    body += "\r\nContent-Type: application/json\r\n\r\n";
-    body += json_part;
-    body += "\r\n";
-    if (T_latent > 0 && !latent.empty()) {
-        body += "--";
-        body += MULTIPART_BOUNDARY;
-        body += "\r\nContent-Type: application/octet-stream\r\n";
-        body += "Content-Disposition: form-data; name=\"latent\"\r\n\r\n";
-        body.append(reinterpret_cast<const char *>(latent.data()), (size_t) T_latent * LATENT_FRAME_BYTES);
-        body += "\r\n";
-    }
-    body += "--";
-    body += MULTIPART_BOUNDARY;
-    body += "--\r\n";
-    return body;
-}
-
-static const std::string MULTIPART_MIME = std::string("multipart/mixed; boundary=") + MULTIPART_BOUNDARY;
-
-// generate a random hex ID (64 bits of entropy, non-predictable)
-static std::string job_make_id() {
-    static std::mt19937_64      rng(std::random_device{}());
-    static std::mutex           mtx_rng;
-    std::lock_guard<std::mutex> lock(mtx_rng);
-    char                        buf[17];
-    snprintf(buf, sizeof(buf), "%016llx", (unsigned long long) rng());
-    return buf;
-}
-
-static std::shared_ptr<Job> job_create() {
-    std::lock_guard<std::mutex> lock(mtx_jobs);
-    auto                        job = std::make_shared<Job>();
-    job->id                         = job_make_id();
-    g_jobs[job->id]                 = job;
-    g_job_order.push_back(job->id);
-
-    // evict oldest completed jobs to stay under MAX_JOBS.
-    // running jobs (status 0) are never evicted.
-    while ((int) g_job_order.size() > MAX_JOBS) {
-        bool evicted = false;
-        for (auto it = g_job_order.begin(); it != g_job_order.end(); ++it) {
-            auto jit = g_jobs.find(*it);
-            if (jit == g_jobs.end() || jit->second->status.load() != JobStatus::RUNNING) {
-                if (jit != g_jobs.end()) {
-                    g_jobs.erase(jit);
-                }
-                g_job_order.erase(it);
-                evicted = true;
-                break;
-            }
-        }
-        if (!evicted) {
-            break;
-        }
-    }
-    return job;
-}
-
-static std::shared_ptr<Job> job_find(const std::string & id) {
-    std::lock_guard<std::mutex> lock(mtx_jobs);
-    auto                        it = g_jobs.find(id);
-    return it != g_jobs.end() ? it->second : nullptr;
-}
-
-static const char * job_status_str(JobStatus s) {
-    switch (s) {
-        case JobStatus::RUNNING:
-            return "running";
-        case JobStatus::DONE:
-            return "done";
-        case JobStatus::FAILED:
-            return "failed";
-        case JobStatus::CANCELLED:
-            return "cancelled";
-    }
-    return "unknown";
+    if (g_svr) g_svr->stop();
 }
 
 // log capture: intercept stderr via pipe, forward to terminal + ring buffer.
+// SSE clients connect to /logs and receive lines in real time.
 // SSE clients connect to /logs and receive lines in real time.
 #define LOG_RING_BITS 9
 #define LOG_RING_SIZE (1 << LOG_RING_BITS)
@@ -546,12 +284,6 @@ static void handle_logs(const httplib::Request &, httplib::Response & res) {
         });
 }
 
-// cancel callback: checks the per-job cancel flag.
-static bool server_cancel_job(void * data) {
-    auto * flag = (const std::atomic<bool> *) data;
-    return flag && flag->load(std::memory_order_relaxed);
-}
-
 // helper: set a JSON error response
 static void json_error(httplib::Response & res, int status, const char * msg) {
     yyjson_mut_doc * doc  = yyjson_mut_doc_new(NULL);
@@ -563,22 +295,6 @@ static void json_error(httplib::Response & res, int status, const char * msg) {
     res.status = status;
     res.set_content(json, "application/json");
     free(json);
-}
-
-// resolve model name: explicit request > already loaded > first in bucket
-static std::string resolve_name(const std::vector<ModelEntry> & bucket,
-                                const std::string &             requested,
-                                const std::string &             loaded) {
-    if (!requested.empty()) {
-        return requested;
-    }
-    if (!loaded.empty()) {
-        return loaded;
-    }
-    if (!bucket.empty()) {
-        return bucket[0].name;
-    }
-    return "";
 }
 
 // LM worker: generates metadata + lyrics + codes, stores JSON result in job.
@@ -1545,123 +1261,14 @@ static void handle_vae(const httplib::Request & req, httplib::Response & res) {
     res.set_content(body, "application/json");
 }
 
-// GET /props
-// server configuration, available models, and default request.
-// the webui reads this at boot to populate dropdowns and status indicators.
+// GET /props — thin wrapper around engine_props_json()
 static void handle_props(const httplib::Request &, httplib::Response & res) {
-    yyjson_mut_doc * doc  = yyjson_mut_doc_new(NULL);
-    yyjson_mut_val * root = yyjson_mut_obj(doc);
-    yyjson_mut_doc_set_root(doc, root);
-
-    yyjson_mut_obj_add_str(doc, root, "version", ACE_VERSION);
-
-    // helper: build a JSON array of model entry names
-    auto add_names = [&](yyjson_mut_val * parent, const char * key, const std::vector<ModelEntry> & bucket) {
-        yyjson_mut_val * arr = yyjson_mut_arr(doc);
-        for (const auto & e : bucket) {
-            yyjson_mut_arr_add_str(doc, arr, e.name.c_str());
-        }
-        yyjson_mut_obj_add_val(doc, parent, key, arr);
-    };
-
-    // models: available model names per bucket
-    yyjson_mut_val * models = yyjson_mut_obj(doc);
-    yyjson_mut_obj_add_val(doc, root, "models", models);
-    add_names(models, "lm", g_registry.lm);
-    add_names(models, "embedding", g_registry.text_enc);
-    add_names(models, "dit", g_registry.dit);
-    add_names(models, "vae", g_registry.vae);
-
-    // adapters: available adapter names
-    yyjson_mut_val * adapters_arr = yyjson_mut_arr(doc);
-    for (const auto & e : g_registry.adapters) {
-        yyjson_mut_arr_add_str(doc, adapters_arr, e.name.c_str());
-    }
-    yyjson_mut_obj_add_val(doc, root, "adapters", adapters_arr);
-
-    // cli: server settings
-    yyjson_mut_val * cli = yyjson_mut_obj(doc);
-    yyjson_mut_obj_add_val(doc, root, "cli", cli);
-    yyjson_mut_obj_add_int(doc, cli, "max_batch", g_max_batch);
-
-    // default: full AceRequest with all defaults from request_init().
-    // the webui reads this to populate LM placeholders.
-    // DiT fields (inference_steps, guidance_scale, shift) are 0 = auto-detect;
-    // their resolved placeholders come from presets below.
-    AceRequest defaults;
-    request_init(&defaults);
-    std::string      defaults_str  = request_to_json(&defaults, false);
-    yyjson_doc *     defaults_doc  = yyjson_read(defaults_str.c_str(), defaults_str.size(), 0);
-    yyjson_mut_val * defaults_copy = yyjson_val_mut_copy(doc, yyjson_doc_get_root(defaults_doc));
-    yyjson_mut_obj_add_val(doc, root, "default", defaults_copy);
-    yyjson_doc_free(defaults_doc);
-
-    // presets: auto-detect values for DiT sampling params.
-    // the webui switches placeholders based on the selected DiT model.
-    yyjson_mut_val * presets = yyjson_mut_obj(doc);
-    yyjson_mut_obj_add_val(doc, root, "presets", presets);
-
-    yyjson_mut_val * turbo = yyjson_mut_obj(doc);
-    yyjson_mut_obj_add_int(doc, turbo, "inference_steps", 8);
-    yyjson_mut_obj_add_real(doc, turbo, "guidance_scale", 1.0);
-    yyjson_mut_obj_add_real(doc, turbo, "shift", 3.0);
-    yyjson_mut_obj_add_val(doc, presets, "turbo", turbo);
-
-    yyjson_mut_val * sft = yyjson_mut_obj(doc);
-    yyjson_mut_obj_add_int(doc, sft, "inference_steps", 50);
-    yyjson_mut_obj_add_real(doc, sft, "guidance_scale", 1.0);
-    yyjson_mut_obj_add_real(doc, sft, "shift", 1.0);
-    yyjson_mut_obj_add_val(doc, presets, "sft", sft);
-
-    // serialize
-    yyjson_write_flag flags = YYJSON_WRITE_PRETTY | YYJSON_WRITE_PRETTY_TWO_SPACES | YYJSON_WRITE_FP_TO_FIXED(2);
-    char *            json  = yyjson_mut_write(doc, flags, NULL);
-    yyjson_mut_doc_free(doc);
-    res.set_content(json, "application/json");
-    free(json);
+    res.set_content(engine_props_json(), "application/json");
 }
 
-// GET /metrics
-// Local host telemetry for the WebUI. GPU utilization is backend/platform
-// dependent, so the response keeps explicit availability flags for every
-// reading instead of conflating an unsupported probe with zero load.
+// GET /metrics — thin wrapper around engine_metrics_json()
 static void handle_metrics(const httplib::Request &, httplib::Response & res) {
-    const AceSystemMetrics metrics = system_metrics_sample();
-    yyjson_mut_doc *        doc = yyjson_mut_doc_new(NULL);
-    yyjson_mut_val *        root = yyjson_mut_obj(doc);
-    yyjson_mut_doc_set_root(doc, root);
-
-    yyjson_mut_val * cpu = yyjson_mut_obj(doc);
-    yyjson_mut_obj_add_bool(doc, cpu, "available", metrics.cpu_available);
-    yyjson_mut_obj_add_real(doc, cpu, "usage", metrics.cpu_usage);
-    yyjson_mut_obj_add_uint(doc, cpu, "cores", metrics.cpu_cores);
-    yyjson_mut_obj_add_val(doc, root, "cpu", cpu);
-
-    yyjson_mut_val * gpu = yyjson_mut_obj(doc);
-    yyjson_mut_obj_add_bool(doc, gpu, "available", metrics.gpu_available);
-    yyjson_mut_obj_add_bool(doc, gpu, "usage_available", metrics.gpu_usage_available);
-    yyjson_mut_obj_add_real(doc, gpu, "usage", metrics.gpu_usage);
-    yyjson_mut_obj_add_str(doc, gpu, "name", metrics.gpu_name.c_str());
-    yyjson_mut_obj_add_str(doc, gpu, "backend", metrics.gpu_backend.c_str());
-    yyjson_mut_obj_add_val(doc, root, "gpu", gpu);
-
-    yyjson_mut_val * vram = yyjson_mut_obj(doc);
-    yyjson_mut_obj_add_bool(doc, vram, "available", metrics.vram_available);
-    yyjson_mut_obj_add_uint(doc, vram, "used", metrics.vram_used);
-    yyjson_mut_obj_add_uint(doc, vram, "total", metrics.vram_total);
-    yyjson_mut_obj_add_val(doc, root, "vram", vram);
-
-    yyjson_mut_val * memory = yyjson_mut_obj(doc);
-    yyjson_mut_obj_add_bool(doc, memory, "available", metrics.memory_available);
-    yyjson_mut_obj_add_real(doc, memory, "usage", metrics.memory_usage);
-    yyjson_mut_obj_add_uint(doc, memory, "used", metrics.memory_used);
-    yyjson_mut_obj_add_uint(doc, memory, "total", metrics.memory_total);
-    yyjson_mut_obj_add_val(doc, root, "memory", memory);
-
-    char * json = yyjson_mut_write(doc, YYJSON_WRITE_FP_TO_FIXED(2), NULL);
-    yyjson_mut_doc_free(doc);
-    res.set_content(json, "application/json");
-    free(json);
+    res.set_content(engine_metrics_json(), "application/json");
 }
 
 static void usage(const char * prog) {

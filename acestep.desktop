@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=ACE-Step
+GenericName=AI Music Generator
+Comment=Local AI music generation server (RX 580 / Vulkan). Starts the server and opens the WebUI.
+Exec=/mnt/Data/Projects/acestep.cpp/start.sh
+Icon=acestep
+Terminal=false
+Categories=Audio;AudioVideo;Music;
+Keywords=music;ai;generator;audio;
+StartupNotify=false

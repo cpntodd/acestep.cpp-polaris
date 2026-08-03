@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Polaris Studio
+GenericName=Local AI Music Lab
+Comment=Private local AI music generation with GGML engine
+Exec=polaris-studio
+TryExec=polaris-studio
+Icon=polaris-studio
+Terminal=false
+Categories=AudioVideo;Audio;Music;
+Keywords=Polaris;ACE-Step;music;audio;AI;generator;lyrics;
+StartupNotify=true
+StartupWMClass=polaris-studio
+X-GNOME-UsesNotifications=true

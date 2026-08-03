@@ -95,7 +95,7 @@ Maintainer: cpntodd <acestep.cpp@localhost>
 Depends: bash, curl, xdg-utils, libvulkan1, libc6, libgcc-s1, libstdc++6, libgomp1
 Recommends: mesa-vulkan-drivers | nvidia-vulkan-icd | intel-media-va-driver
 Description: ACE-Step.cpp local AI music workstation
- A branded desktop launcher for cpntodd/acestep.cpp-polaris with the embedded WebUI,
+ A branded desktop launcher for cpntodd/Polaris-Studio with the embedded WebUI,
  local reference workflow, English/Macedonian speech-language listener (CPU by
  default, with optional local Vulkan mode),
  production tools, and all models included in the build checkout. The server

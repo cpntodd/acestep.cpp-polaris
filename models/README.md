@@ -1,6 +1,7 @@
-# Models
+# Polaris Studio Models
 
-Place your GGUF model files here. You need one of each type:
+Place the local GGUF model files used by Polaris Studio here. You need one of
+each type:
 
 | Type | Example | Role |
 |------|---------|------|
